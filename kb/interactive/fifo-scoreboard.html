@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FIFO scoreboard: the rd_en && rd_valid trap</title>
+<meta name="description" content="Run a FIFO for a few cycles and watch which pop condition misses beats or misses DUT bugs.">
+<link rel="stylesheet" href="../../assets/style.css">
+<script>try{const t=JSON.parse(localStorage.getItem("tqg:theme"));if(t)document.documentElement.dataset.theme=t}catch{}</script>
+<style>
+  body{ background:var(--surface); } .wrap{ padding:20px; max-width:1000px; }
+  .ctl{ display:flex; gap:18px; flex-wrap:wrap; margin:14px 0; align-items:center; font-size:14.5px; }
+  .ctl fieldset{ border:1px solid var(--hair); border-radius:12px; padding:6px 12px; margin:0; } .ctl legend{ font-size:12px; color:var(--muted); padding:0 4px; }
+  svg{ width:100%; height:auto; background:var(--raised); border:1px solid var(--hair); border-radius:14px; }
+  .res{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-top:12px; } @media (max-width:700px){ .res{ grid-template-columns:1fr; } }
+  .res div{ background:var(--raised); border:1px solid var(--hair); border-radius:12px; padding:12px 14px; font-size:14.5px; }
+  .res div.bad{ border-color:var(--rose); } .res div.ok{ border-color:var(--auto); }
+  .res h3{ font-family:var(--mono); font-size:14px; margin-bottom:6px; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <h2>Scoreboard pop condition: <span class="mono">rd_valid</span> vs <span class="mono">rd_en &amp;&amp; rd_valid</span></h2>
+  <p class="sub">Writes push into the reference queue. Each scoreboard pops and compares on its own condition. Change the scenario and see which one stays honest.</p>
+  <div class="ctl">
+    <fieldset><legend>Read latency</legend><label><input type="radio" name="lat" value="0"> 0 (same cycle)</label> <label><input type="radio" name="lat" value="1" checked> 1 cycle</label></fieldset>
+    <fieldset><legend>Scenario</legend><label><input type="radio" name="sc" value="single" checked> single read</label> <label><input type="radio" name="sc" value="burst"> burst of 3</label></fieldset>
+    <fieldset><legend>Inject DUT bug</legend><label><input type="checkbox" id="bug"> spurious rd_valid (no rd_en)</label></fieldset>
+  </div>
+  <svg id="w" viewBox="0 0 960 330" role="img" aria-label="FIFO waveform"></svg>
+  <div class="res" id="res"></div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const NS = "http://www.w3.org/2000/svg";
+const mk = (t, a, txt) => { const n = document.createElementNS(NS, t); for (const k in a) n.setAttribute(k, a[k]); if (txt != null) n.textContent = txt; return n; };
+const N = 12;
+function simulate(lat, sc, bug) {
+  const wr = Array(N).fill(0), din = Array(N).fill(null), rd = Array(N).fill(0);
+  [[1, "A"], [2, "B"], [3, "C"]].forEach(([c, v]) => { wr[c] = 1; din[c] = v; });
+  if (sc === "single") rd[5] = 1; else { rd[5] = rd[6] = rd[7] = 1; }
+  const fifo = [], valid = Array(N).fill(0), dout = Array(N).fill(null);
+  const pendingOut = [];
+  for (let c = 0; c < N; c++) {
+    if (wr[c]) fifo.push(din[c]);
+    if (rd[c] && fifo.length) { const v = fifo.shift(); if (lat === 0) { valid[c] = 1; dout[c] = v; } else pendingOut.push([c + 1, v]); }
+    pendingOut.filter(([t]) => t === c).forEach(([, v]) => { valid[c] = 1; dout[c] = v; });
+  }
+  if (bug) { const c = sc === "single" ? 9 : 10; valid[c] = 1; dout[c] = "?"; }
+  return { wr, din, rd, valid, dout };
+}
+function scoreboard(sig, cond) {
+  const q = []; const ev = []; let ok = 0, bad = 0;
+  for (let c = 0; c < N; c++) {
+    if (sig.wr[c]) q.push(sig.din[c]);
+    const fire = cond === "valid" ? sig.valid[c] : (sig.rd[c] && sig.valid[c]);
+    if (fire) { const exp = q.shift(); const got = sig.dout[c]; if (exp === got) { ok++; ev.push([c, "✓", exp]); } else { bad++; ev.push([c, "✗", `${exp ?? "empty"}≠${got}`]); } }
+  }
+  const reads = sig.valid.filter((v, c) => v && sig.dout[c] !== "?").length;
+  const looked = ev.filter(([c]) => sig.dout[c] !== "?").length;
+  return { ok, bad, ev, missed: reads - looked };
+}
+function draw() {
+  const lat = +document.querySelector("input[name=lat]:checked").value, sc = document.querySelector("input[name=sc]:checked").value, bug = $("bug").checked;
+  const sig = simulate(lat, sc, bug);
+  const w = $("w"); w.replaceChildren();
+  const x0 = 120, cw = (940 - x0) / N, H = 18;
+  const rows = [["clk", "clk"], ["wr_en", "wr"], ["din", "din"], ["rd_en", "rd"], ["rd_valid", "valid"], ["dout", "dout"]];
+  rows.forEach(([name, k], r) => {
+    const y = 18 + r * 36;
+    w.append(mk("text", { x: 10, y: y + 13, "font-size": 13, fill: "var(--muted)", "font-family": "var(--mono)" }, name));
+    if (k === "clk") { let d = `M ${x0} ${y + H}`; for (let c = 0; c < N; c++) { d += ` V ${y} H ${x0 + c * cw + cw / 2} V ${y + H} H ${x0 + (c + 1) * cw}`; } w.append(mk("path", { d, fill: "none", stroke: "var(--ink)", "stroke-width": 1.4 })); return; }
+    if (k === "din" || k === "dout") { for (let c = 0; c < N; c++) { const v = sig[k][c]; const xa = x0 + c * cw;
+      w.append(mk("path", { d: `M ${xa} ${y + H / 2} l 4 -${H / 2} H ${xa + cw - 4} l 4 ${H / 2} l -4 ${H / 2} H ${xa + 4} Z`, fill: v ? (v === "?" ? "var(--rose-wash)" : "var(--sv-wash)") : "none", stroke: "var(--faint)" }));
+      if (v) w.append(mk("text", { x: xa + cw / 2, y: y + 13, "text-anchor": "middle", "font-size": 12, "font-family": "var(--mono)", fill: "var(--ink)" }, v)); } return; }
+    let d = ""; for (let c = 0; c < N; c++) { const yy = sig[k][c] ? y : y + H; d += (c ? ` V ${yy}` : `M ${x0} ${yy}`) + ` H ${x0 + (c + 1) * cw}`; }
+    w.append(mk("path", { d, fill: "none", stroke: k === "valid" ? "var(--auto)" : "var(--sv)", "stroke-width": 2 }));
+  });
+  for (let c = 0; c < N; c++) w.append(mk("text", { x: x0 + c * cw + cw / 2, y: 236, "text-anchor": "middle", "font-size": 11, fill: "var(--muted)" }, c));
+  const A = scoreboard(sig, "valid"), B = scoreboard(sig, "rden");
+  [[A, 262, "pop on rd_valid", "var(--auto)"], [B, 296, "pop on rd_en && rd_valid", "var(--rose)"]].forEach(([s, y, name, col]) => {
+    w.append(mk("text", { x: 10, y: y + 4, "font-size": 12, fill: col, "font-family": "var(--mono)" }, name.length > 15 ? "rd_en&&rd_valid" : "rd_valid"));
+    s.ev.forEach(([c, m, t]) => { w.append(mk("circle", { cx: x0 + c * cw + cw / 2, cy: y, r: 11, fill: m === "✓" ? "var(--auto-wash)" : "var(--rose-wash)", stroke: m === "✓" ? "var(--auto)" : "var(--rose)" })); w.append(mk("text", { x: x0 + c * cw + cw / 2, y: y + 4, "text-anchor": "middle", "font-size": 12 }, m)); });
+  });
+  const res = (s, name) => {
+    const caught = bug && s.bad > 0;
+    let msg = `${s.ok} beat${s.ok === 1 ? "" : "s"} compared OK.`;
+    if (s.missed) msg += ` <b>Missed ${s.missed} real read beat${s.missed > 1 ? "s" : ""}</b>: rd_valid came after rd_en had dropped.`;
+    if (bug) msg += caught ? " <b>Caught</b> the spurious rd_valid." : " <b>Blind</b> to the spurious rd_valid: rd_en was low, so this scoreboard never looked.";
+    const good = !s.missed && (!bug || caught);
+    return `<div class="${good ? "ok" : "bad"}"><h3>${name}</h3>${msg}</div>`;
+  };
+  $("res").innerHTML = res(A, "pop on rd_valid") + res(B, "pop on rd_en && rd_valid");
+}
+document.querySelectorAll("input").forEach(i => i.onchange = draw); draw();
+</script>
+</body>
+</html>

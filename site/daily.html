@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daily log · Verification growth</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌱</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..900,0..1,0..1,0..1&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .hrow{ display:grid; grid-template-columns:14px 1fr 86px; gap:10px; align-items:center; padding:5px 0; font-size:14.5px; }
+  .sw{ width:12px; height:12px; border-radius:4px; }
+  .hsum{ text-align:right; color:var(--muted); font-size:13.5px; margin-top:6px; }
+  .focus{ display:flex; gap:6px; } .focus button{ width:36px; height:36px; border-radius:10px; border:1px solid var(--faint); background:var(--raised); cursor:pointer; }
+  .focus button[aria-checked="true"]{ background:var(--ink); color:var(--bg); }
+  .legend{ display:flex; gap:14px; flex-wrap:wrap; font-size:13px; color:var(--muted); margin-top:8px; }
+  .legend i{ display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:5px; vertical-align:-1px; }
+  .rate{ display:grid; grid-template-columns:1fr 150px 22px; gap:10px; align-items:center; padding:6px 0; border-top:1px solid var(--hair); font-size:14.5px; }
+  .rate:first-child{ border-top:0; } .rate small{ display:block; color:var(--muted); font-size:12.5px; }
+  .rate input[type=range]{ width:100%; accent-color:var(--sv); }
+  .radar svg{ width:100%; height:auto; max-width:520px; display:block; margin:0 auto; }
+  table.ev{ width:100%; border-collapse:collapse; font-size:14px; } table.ev td, table.ev th{ border-bottom:1px solid var(--hair); padding:7px 6px; text-align:left; vertical-align:top; }
+  table.ev th{ font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); }
+  .daylist li{ font-size:14.5px; } .daylist .h{ font-family:var(--mono); color:var(--muted); min-width:44px; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header class="page">
+    <div><h1>Daily log</h1>
+      <p class="lede">A few minutes at the end of each day: where your hours went, how focused you were, and what you'd strengthen. Each day is saved as <span class="mono">data/daily/YYYY-MM-DD.json</span> in the repo.</p></div>
+  </header>
+
+  <div class="grid2">
+    <section class="card">
+      <header><h2 id="entryTitle">Today</h2><input type="date" id="dDate" style="width:auto"></header>
+      <p class="k">Hours</p>
+      <div id="hours"></div>
+      <p class="k" style="margin-top:14px">Focus</p>
+      <div class="focus" id="focus" role="radiogroup" aria-label="Focus, 1 to 5"></div>
+      <div style="margin-top:14px"><label class="f" for="dDid">What I did</label><textarea id="dDid" placeholder="Debugged …, read …, wrote …"></textarea></div>
+      <div style="margin-top:10px"><label class="f" for="dWeak">What I should strengthen</label><textarea id="dWeak" placeholder="I couldn't explain …"></textarea></div>
+      <p class="k" style="margin-top:12px">Tag competencies</p>
+      <div class="row" id="tags"></div>
+      <div class="row" style="margin-top:16px;justify-content:space-between">
+        <span class="status" id="dStatus"></span>
+        <span class="row"><button class="btn quiet" id="dNew">New</button><button class="btn primary" id="dSave">Save day</button></span>
+      </div>
+    </section>
+
+    <section class="card">
+      <header><div><h2>Last two weeks</h2><p class="sub">Hours by area. Rings show focus.</p></div></header>
+      <div id="bars"></div>
+      <div class="legend" id="legend"></div>
+      <p id="analysis" style="margin-top:14px"></p>
+      <p class="k" style="margin-top:16px">Recent days</p>
+      <ul class="clean daylist" id="days"></ul>
+    </section>
+  </div>
+
+  <div class="grid2">
+    <section class="card">
+      <header><div><h2>Rate yourself</h2><p class="sub">1 aware · 2 guided · 3 independent on routine work · 4 independent on complex work · 5 owns it</p></div></header>
+      <div id="rates"></div>
+      <div class="row" style="margin-top:12px;justify-content:space-between"><span class="status" id="rStatus"></span><button class="btn" id="rSave">Save ratings</button></div>
+    </section>
+    <section class="card">
+      <header><div><h2>Self vs panel vs benchmark</h2><p class="sub" id="radarSub"></p></div></header>
+      <div class="radar" id="radar"></div>
+      <div class="legend" id="radarLegend"></div>
+      <p class="sub" style="margin-top:10px">The benchmark band is a working junior-DV reference (entry → solid junior), not an official standard. To run a new panel evaluation, ask the DE + DV coach in Claude to “evaluate me from the repo”; it appends to <span class="mono">data/evaluations.json</span>.</p>
+    </section>
+  </div>
+
+  <section class="card">
+    <header><div><h2>Panel evaluations</h2><p class="sub">From data/evaluations.json</p></div></header>
+    <div id="evals"></div>
+  </section>
+</main>
+
+<script type="module">
+import { $, el, sv, chrome, manifest, fetchJSON, today, addDays, fmtDate, canWrite, ghWrite, download, store, openSettings } from "./assets/app.js";
+chrome("daily.html");
+
+const COMP = [
+  { id: "uvm",    name: "UVM testbench",         short: "UVM",        entry: 2, solid: 3, desc: "Agents, sequences, phasing, factory, config_db, scoreboards" },
+  { id: "debug",  name: "Debug and triage",      short: "Debug",      entry: 2, solid: 3, desc: "Waveforms, logs, DUT vs testbench bugs, regression triage" },
+  { id: "cov",    name: "Coverage and planning", short: "Coverage",   entry: 1, solid: 3, desc: "Verification plans from spec, covergroups, closure" },
+  { id: "spec",   name: "Spec and RTL reading",  short: "Spec / RTL", entry: 2, solid: 3, desc: "Design intent, interfaces, clocking and reset" },
+  { id: "proto",  name: "Protocol knowledge",    short: "Protocol",   entry: 1, solid: 3, desc: "PCIe, AXI, DMA descriptors as used in the DMA IP" },
+  { id: "cpp",    name: "C++ and DPI-C",         short: "C++ / DPI",  entry: 1, solid: 2, desc: "Reference models, ownership, the DPI-C boundary, build/link" },
+  { id: "auto",   name: "Automation scripting",  short: "Scripting",  entry: 2, solid: 3, desc: "Python, TCL, Bash, exit codes, regression flow" },
+  { id: "habits", name: "Engineering habits",    short: "Habits",     entry: 2, solid: 3, desc: "Git, reviews, documentation, asking good questions" },
+];
+const TIME = [
+  { id: "tb",    name: "Testbench and coverage",   maps: ["uvm", "cov"],    color: "var(--sv)" },
+  { id: "debug", name: "Debug and triage",         maps: ["debug"],         color: "var(--rose)" },
+  { id: "spec",  name: "Spec, RTL, protocol",      maps: ["spec", "proto"], color: "var(--sand)" },
+  { id: "cpp",   name: "C++ and DPI-C",            maps: ["cpp"],           color: "var(--cpp)" },
+  { id: "auto",  name: "Automation",               maps: ["auto"],          color: "var(--auto)" },
+  { id: "study", name: "Study, reviews, meetings", maps: ["habits"],        color: "var(--seam)" },
+];
+const sumHours = (d) => TIME.reduce((a, t) => a + (+d.hours?.[t.id] || 0), 0);
+
+const M = await manifest();
+// Days from the repo, plus anything saved here that the site hasn't rebuilt with yet.
+const pending = store.get("pendingDays", {});
+let days = Object.values(Object.fromEntries([...M.daily, ...Object.values(pending)].map(d => [d.date, d]))).sort((a, b) => b.date.localeCompare(a.date));
+for (const d of M.daily) if (pending[d.date] && pending[d.date].savedAt <= (d.savedAt || "")) delete pending[d.date];
+store.set("pendingDays", pending);
+const evals = await fetchJSON("data/evaluations.json", []);
+let self = store.get("selfPending", null) || await fetchJSON("data/self_rating.json", { current: {}, history: [] });
+
+/* ---- form ---- */
+let focus = 0, tags = new Set();
+TIME.forEach(t => { const inp = el("input", { type: "number", min: "0", max: "16", step: "0.25", id: `h-${t.id}`, placeholder: "0", inputmode: "decimal", "aria-label": `${t.name}, hours` }); inp.oninput = sumUpd;
+  $("hours").append(el("label", { class: "hrow" }, el("span", { class: "sw", style: `background:${t.color}` }), el("span", {}, t.name), inp)); });
+$("hours").append(el("div", { class: "hsum", id: "hSum" }, "0 hours"));
+for (let i = 1; i <= 5; i++) $("focus").append(el("button", { role: "radio", "aria-checked": "false", "aria-label": `Focus ${i}`, onclick: () => { focus = focus === i ? 0 : i; paint(); } }, i));
+COMP.forEach(c => $("tags").append(el("button", { class: "chip", "aria-pressed": "false", "data-id": c.id, title: c.desc, onclick: () => { tags.has(c.id) ? tags.delete(c.id) : tags.add(c.id); paint(); } }, c.short)));
+function paint() { [...$("focus").children].forEach((b, i) => b.setAttribute("aria-checked", String(focus === i + 1))); [...$("tags").children].forEach(b => b.setAttribute("aria-pressed", String(tags.has(b.dataset.id)))); }
+function sumUpd() { const t = TIME.reduce((a, x) => a + (+$(`h-${x.id}`).value || 0), 0); $("hSum").textContent = `${+t.toFixed(2)} hours`; }
+function fill(d) {
+  $("dDate").value = d.date; TIME.forEach(t => $(`h-${t.id}`).value = d.hours?.[t.id] || "");
+  $("dDid").value = d.did || ""; $("dWeak").value = d.strengthen || ""; focus = d.focus || 0; tags = new Set(d.tags || []);
+  paint(); sumUpd(); $("entryTitle").textContent = d.date === today() ? "Today" : fmtDate(d.date, true);
+}
+$("dDate").onchange = () => { const ex = days.find(d => d.date === $("dDate").value); fill(ex || { date: $("dDate").value }); $("dStatus").textContent = ex ? "Editing a saved day." : ""; };
+$("dNew").onclick = () => { fill({ date: today() }); $("dStatus").textContent = ""; };
+fill(days.find(d => d.date === today()) || { date: today() });
+
+$("dSave").onclick = async () => {
+  const d = { date: $("dDate").value || today(), hours: {}, focus, did: $("dDid").value.trim(), strengthen: $("dWeak").value.trim(), tags: [...tags], savedAt: new Date().toISOString() };
+  TIME.forEach(t => { const v = +$(`h-${t.id}`).value; if (v > 0) d.hours[t.id] = Math.min(24, v); });
+  if (!sumHours(d) && !d.did && !d.strengthen) { status("dStatus", "Add some hours or a note first.", "bad"); return; }
+  days = days.filter(x => x.date !== d.date).concat(d).sort((a, b) => b.date.localeCompare(a.date));
+  pending[d.date] = d; store.set("pendingDays", pending); render();
+  const text = JSON.stringify(d, null, 2) + "\n";
+  if (!canWrite()) { download(`${d.date}.json`, text); status("dStatus", "Saved in this browser and downloaded. Put the file in data/daily/, or Connect to save straight to GitHub.", ""); return; }
+  $("dSave").disabled = true; status("dStatus", "Committing…", "");
+  try { await ghWrite(`data/daily/${d.date}.json`, text, `daily: ${d.date}`); status("dStatus", `Committed ${fmtDate(d.date, true)}. The site picks it up in about a minute.`, "good"); }
+  catch (e) { status("dStatus", `Kept in this browser; GitHub said: ${e.message}`, "bad"); }
+  $("dSave").disabled = false;
+};
+function status(id, msg, cls) { $(id).textContent = msg; $(id).className = "status " + (cls || ""); }
+
+/* ---- bars ---- */
+function windowDays() { const out = []; for (let i = 13; i >= 0; i--) out.push(addDays(today(), -i)); return out; }
+function render() {
+  const dates = windowDays(), by = Object.fromEntries(days.map(d => [d.date, d]));
+  const W = 640, H = 210, pl = 32, pb = 26, pt = 14, ph = H - pb - pt, slot = (W - pl - 6) / 14, bw = Math.min(26, slot * .62);
+  const top = Math.ceil(Math.max(8, ...dates.map(x => by[x] ? sumHours(by[x]) : 0)) / 2) * 2;
+  const s = sv("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img", "aria-label": "Hours per day, last two weeks" });
+  for (let v = 0; v <= top; v += top > 10 ? 4 : 2) { const y = pt + ph - v / top * ph; s.append(sv("line", { x1: pl, x2: W, y1: y, y2: y, stroke: "var(--hair)" })); const t = sv("text", { x: pl - 6, y: y + 4, "text-anchor": "end", "font-size": 11, fill: "var(--muted)" }); t.textContent = v + "h"; s.append(t); }
+  dates.forEach((dt, i) => {
+    const x = pl + i * slot + (slot - bw) / 2, d = by[dt]; let y = pt + ph;
+    if (d) TIME.forEach(t => { const v = +d.hours?.[t.id] || 0; if (!v) return; const h = v / top * ph; y -= h; s.append(sv("rect", { x, y: y + .5, width: bw, height: Math.max(0, h - 1), rx: 3, fill: t.color })); });
+    else s.append(sv("rect", { x, y: pt + ph - 2, width: bw, height: 2, rx: 1, fill: "var(--faint)" }));
+    if (d && d.focus) s.append(sv("circle", { cx: x + bw / 2, cy: y - 8, r: 2 + d.focus * .7, fill: "none", stroke: "var(--muted)", "stroke-width": 1.2 }));
+    const t = sv("text", { x: x + bw / 2, y: H - 8, "text-anchor": "middle", "font-size": 11, fill: dt === today() ? "var(--ink)" : "var(--muted)" }); const [, m, dd] = dt.split("-").map(Number); t.textContent = i === 0 || dd === 1 ? `${dd}/${m}` : dd; s.append(t);
+  });
+  $("bars").replaceChildren(s);
+  $("legend").replaceChildren(...TIME.map(t => el("span", {}, el("i", { style: `background:${t.color}` }), t.name)));
+  // analysis: does time follow what you say you need to strengthen?
+  const win = days.filter(d => dates.includes(d.date)), total = win.reduce((a, d) => a + sumHours(d), 0);
+  if (!win.length) $("analysis").textContent = "Log a few days and this turns into a read of where your time goes.";
+  else {
+    const share = Object.fromEntries(TIME.map(t => [t.id, win.reduce((a, d) => a + (+d.hours?.[t.id] || 0), 0) / (total || 1)]));
+    const tagCount = {}; win.forEach(d => (d.tags || []).forEach(t => tagCount[t] = (tagCount[t] || 0) + 1));
+    const topTag = Object.entries(tagCount).sort((a, b) => b[1] - a[1])[0];
+    const top = TIME.slice().sort((a, b) => share[b.id] - share[a.id])[0];
+    let msg = `${win.length} days, ${+total.toFixed(1)} hours. Most time went to ${top.name.toLowerCase()} (${Math.round(share[top.id] * 100)}%).`;
+    if (topTag) { const area = TIME.find(t => t.maps.includes(topTag[0])); const c = COMP.find(c => c.id === topTag[0]);
+      msg += area && share[area.id] < .15 ? ` You flagged ${c.short} to strengthen on ${topTag[1]} days but gave it only ${Math.round(share[area.id] * 100)}% of your time. Worth protecting a block for it.` : ` You flagged ${c.short} most often, and it's getting time.`; }
+    $("analysis").textContent = msg;
+  }
+  const ul = $("days"); ul.replaceChildren();
+  days.slice(0, 8).forEach(d => ul.append(el("li", {}, el("span", { class: "mono sub", style: "min-width:56px" }, fmtDate(d.date)), el("span", { class: "h" }, `${+sumHours(d).toFixed(1)}h`),
+    el("span", { style: "flex:1" }, d.did || d.strengthen || "—", pending[d.date] ? el("span", { class: "pill", style: "margin-left:6px" }, "not on site yet") : null),
+    el("button", { class: "btn quiet", onclick: () => { fill(d); scrollTo({ top: 0, behavior: "smooth" }); } }, "Edit"))));
+  if (!days.length) ul.append(el("li", { class: "none" }, "Nothing logged yet."));
+}
+render();
+
+/* ---- self rating ---- */
+COMP.forEach(c => {
+  const v = self.current[c.id] || 0;
+  const out = el("span", { class: "mono", id: `rv-${c.id}` }, v || "–");
+  const r = el("input", { type: "range", min: "0", max: "5", step: "0.5", value: v, "aria-label": c.name, oninput: (e) => { out.textContent = +e.target.value || "–"; self.current[c.id] = +e.target.value || 0; drawRadar(); } });
+  $("rates").append(el("div", { class: "rate" }, el("span", {}, c.name, el("small", {}, c.desc)), r, out));
+});
+$("rSave").onclick = async () => {
+  self.history = (self.history || []).filter(h => h.date !== today()).concat({ date: today(), ratings: { ...self.current } });
+  const text = JSON.stringify(self, null, 2) + "\n";
+  store.set("selfPending", self);
+  if (!canWrite()) { download("self_rating.json", text); status("rStatus", "Downloaded. Put it at data/self_rating.json, or Connect to save directly.", ""); return; }
+  try { await ghWrite("data/self_rating.json", text, `self-rating: ${today()}`); store.del("selfPending"); status("rStatus", "Committed.", "good"); } catch (e) { status("rStatus", e.message, "bad"); }
+};
+
+/* ---- radar ---- */
+function drawRadar() {
+  const ev = evals[evals.length - 1];
+  const S = 360, cx = S / 2, cy = S / 2 + 4, R = 128, n = COMP.length;
+  const pt = (i, v) => { const a = -Math.PI / 2 + i * 2 * Math.PI / n; return [cx + Math.cos(a) * R * v / 5, cy + Math.sin(a) * R * v / 5]; };
+  const s = sv("svg", { viewBox: `-74 -6 ${S + 148} ${S + 18}`, role: "img", "aria-label": "Radar of competencies" });
+  for (let k = 1; k <= 5; k++) s.append(sv("polygon", { points: COMP.map((_, i) => pt(i, k).join(",")).join(" "), fill: "none", stroke: "var(--hair)" }));
+  s.append(sv("polygon", { points: COMP.map((c, i) => pt(i, c.solid).join(",")).join(" "), fill: "var(--seam-wash)", stroke: "none" }));
+  s.append(sv("polygon", { points: COMP.map((c, i) => pt(i, c.entry).join(",")).join(" "), fill: "var(--bg)", stroke: "var(--faint)", "stroke-dasharray": "3 3" }));
+  COMP.forEach((c, i) => { const [x, y] = pt(i, 5.9); const t = sv("text", { x, y: y + 4, "text-anchor": x < cx - 5 ? "end" : x > cx + 5 ? "start" : "middle", "font-size": 12, fill: "var(--muted)" }); t.textContent = c.short; s.append(t); s.append(sv("line", { x1: cx, y1: cy, x2: pt(i, 5)[0], y2: pt(i, 5)[1], stroke: "var(--hair)" })); });
+  const poly = (vals, stroke, fill, dash) => { if (!vals.some(v => v)) return; s.append(sv("polygon", { points: vals.map((v, i) => pt(i, v || 0).join(",")).join(" "), fill, stroke, "stroke-width": 2, "stroke-dasharray": dash || "", "stroke-linejoin": "round" })); vals.forEach((v, i) => v && s.append(sv("circle", { cx: pt(i, v)[0], cy: pt(i, v)[1], r: 3, fill: stroke }))); };
+  if (ev) poly(COMP.map(c => (ev.areas.find(a => a.id === c.id) || {}).level || 0), "var(--sv)", "var(--sv-wash)");
+  poly(COMP.map(c => self.current[c.id] || 0), "var(--amber)", "none", "5 4");
+  $("radar").replaceChildren(s);
+  $("radarSub").textContent = ev ? `Panel: ${fmtDate(ev.date, true)} (${ev.source || "coach"})` : "No panel evaluation yet.";
+  $("radarLegend").replaceChildren(el("span", {}, el("i", { style: "background:var(--sv)" }), "panel"), el("span", {}, el("i", { style: "background:var(--amber)" }), "you"), el("span", {}, el("i", { style: "background:var(--seam-wash);border:1px dashed var(--faint)" }), "junior band (entry → solid)"));
+}
+drawRadar(); document.addEventListener("themechange", drawRadar);
+
+/* ---- evaluations ---- */
+[...evals].reverse().forEach((ev, idx) => {
+  const prev = evals[evals.length - 2 - idx];
+  const d = el("details", { class: "x", open: idx === 0 ? true : null }, el("summary", {}, el("span", { class: "mono sub", style: "min-width:64px" }, fmtDate(ev.date)), el("span", {}, ev.source || "Panel evaluation")));
+  const rows = COMP.map(c => { const a = ev.areas.find(x => x.id === c.id) || {}; const p = prev && (prev.areas.find(x => x.id === c.id) || {}).level;
+    const delta = a.level != null && p != null && a.level !== p ? ` (${a.level > p ? "↑" : "↓"} from ${p})` : "";
+    return el("tr", {}, el("td", {}, c.name), el("td", { class: "mono" }, a.level == null ? "no evidence" : a.level + delta), el("td", {}, a.confidence || ""), el("td", { class: "sub" }, a.evidence || "")); });
+  d.append(el("div", { class: "body" }, el("p", {}, ev.summary),
+    el("table", { class: "ev" }, el("thead", {}, el("tr", {}, el("th", {}, "Competency"), el("th", {}, "Level"), el("th", {}, "Confidence"), el("th", {}, "Evidence"))), el("tbody", {}, rows)),
+    el("p", { class: "k", style: "margin-top:14px" }, "Strengthen first"), el("ul", {}, (ev.priorities || []).map(p => el("li", {}, el("strong", {}, (COMP.find(c => c.id === p.id) || {}).short + ": "), p.practice, el("div", { class: "sub" }, p.why)))),
+    ev.routine ? el("p", { class: "sub" }, ev.routine) : null));
+  $("evals").append(d);
+});
+</script>
+</body>
+</html>

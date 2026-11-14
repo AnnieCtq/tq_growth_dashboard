@@ -1,0 +1,158 @@
+[
+  {
+    "date": "2026-10-06",
+    "source": "30-question DE + DV coach assessment",
+    "areas": [
+      {
+        "confidence": "medium",
+        "evidence": "Objections half right (Q21); no testbench construction in the weekly record yet",
+        "id": "uvm",
+        "level": 1.5
+      },
+      {
+        "confidence": "medium",
+        "evidence": "Good practical compile triage and own macro debug (Q17, Q22); scoreboard triage still generic (Q20)",
+        "id": "debug",
+        "level": 2
+      },
+      {
+        "confidence": "high",
+        "evidence": "Four of six coverage answers had a misconception (Q11, Q12, Q15, Q16)",
+        "id": "cov",
+        "level": 1.5
+      },
+      {
+        "confidence": "medium",
+        "evidence": "MAS read as the functional spec (Q23); compile stages not distinguished (Q17)",
+        "id": "spec",
+        "level": 1.5
+      },
+      {
+        "confidence": "low",
+        "evidence": "Not assessed; explaining one accelerator interface from the MAS would settle it",
+        "id": "proto",
+        "level": null
+      },
+      {
+        "confidence": "low",
+        "evidence": "Role of DPI-C in the backdoor flow not yet understood (Q25)",
+        "id": "cpp",
+        "level": 1
+      },
+      {
+        "confidence": "high",
+        "evidence": "Runs and extends the regression system; failure modes of own scripts not yet explained (Q2, Q3, Q5)",
+        "id": "auto",
+        "level": 2.5
+      },
+      {
+        "confidence": "high",
+        "evidence": "Debug notes reused since July, teaches teammates, honest about guidance (Q10, Q22)",
+        "id": "habits",
+        "level": 3
+      }
+    ],
+    "priorities": [
+      {
+        "id": "cov",
+        "practice": "Explain one number from your own URG report each day in your own words, then check it.",
+        "why": "You generate coverage for the team, but type vs instance scores, code vs functional, stress vs smoke and merge semantics were misread."
+      },
+      {
+        "id": "auto",
+        "practice": "Trace one failure path in the real script logic per day this week.",
+        "why": "Crash before limit release, cron overlap and the vcs_run.log deletion were answered as how it works, not how it fails."
+      },
+      {
+        "id": "debug",
+        "practice": "On each Project C failure, write a hypothesis and expected-vs-actual before asking anyone.",
+        "why": "The Xcelium comparison plan assumes the same seed gives the same stimulus, and test-level triage is still generic."
+      }
+    ],
+    "routine": "Keep regression operations as the base, but protect about an hour a day for coverage and test-level debug, where your next growth is.",
+    "strengths": [
+      "Owning and extending the regression system",
+      "Keeping and reusing debug notes",
+      "Teaching teammates and sharing tutorials"
+    ],
+    "summary": "Operationally you're on track or ahead for three months in a DV role, running and extending the regression system. Core verification concepts sit at entry level, and coverage is most urgent because the team relies on the numbers you generate."
+  },
+  {
+    "date": "2026-10-28",
+    "source": "DE + DV coach explain-backs",
+    "areas": [
+      {
+        "confidence": "medium",
+        "evidence": "blk_status multi-instance checker fix and ACC_BE frontdoor RAL work; uvm_hdl_read and config_db explained back; RAL internals not yet",
+        "id": "uvm",
+        "level": 2
+      },
+      {
+        "confidence": "medium",
+        "evidence": "Real checker debug done, but the DUT vs testbench verdict was misjudged; root cause vs trigger mixed up",
+        "id": "debug",
+        "level": 2
+      },
+      {
+        "confidence": "medium",
+        "evidence": "Union vs average calculated, flow mode found in Verdi, coverage records not checks; sign-off sentence pending",
+        "id": "cov",
+        "level": 2
+      },
+      {
+        "confidence": "medium",
+        "evidence": "MAS read as the functional spec (Q23); compile stages not distinguished (Q17)",
+        "id": "spec",
+        "level": 1.5
+      },
+      {
+        "confidence": "low",
+        "evidence": "Not assessed; explaining one accelerator interface from the MAS would settle it",
+        "id": "proto",
+        "level": null
+      },
+      {
+        "confidence": "low",
+        "evidence": "Role of DPI-C in the backdoor flow not yet understood (Q25)",
+        "id": "cpp",
+        "level": 1
+      },
+      {
+        "confidence": "high",
+        "evidence": "Runs and extends the regression system; failure modes of own scripts not yet explained (Q2, Q3, Q5)",
+        "id": "auto",
+        "level": 2.5
+      },
+      {
+        "confidence": "high",
+        "evidence": "Debug notes reused since July, teaches teammates, honest about guidance (Q10, Q22)",
+        "id": "habits",
+        "level": 3
+      }
+    ],
+    "priorities": [
+      {
+        "id": "debug",
+        "practice": "For every failure you touch, write 'trigger / root cause / DUT or TB / where the fix went' before closing it.",
+        "why": "The blk_status fix was in the checker, but the verdict given was DUT; that judgement is the core junior DV skill."
+      },
+      {
+        "id": "auto",
+        "practice": "Trace one failure path in the real script logic per day this week.",
+        "why": "Crash before limit release, cron overlap and the vcs_run.log deletion were answered as how it works, not how it fails."
+      },
+      {
+        "id": "debug",
+        "practice": "On each Project C failure, write a hypothesis and expected-vs-actual before asking anyone.",
+        "why": "The Xcelium comparison plan assumes the same seed gives the same stimulus, and test-level triage is still generic."
+      }
+    ],
+    "routine": "Keep the testbench work going alongside regression ownership; it is moving your ratings.",
+    "strengths": [
+      "Owning and extending the regression system",
+      "Keeping and reusing debug notes",
+      "Teaching teammates and sharing tutorials"
+    ],
+    "summary": "Testbench-level evidence has arrived: a multi-instance checker debug and frontdoor RAL work. UVM moves from 1.5 to 2 and coverage from 1.5 to 2, while the DUT vs testbench judgement still needs work."
+  }
+]

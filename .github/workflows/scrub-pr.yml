@@ -1,0 +1,21 @@
+name: Scrub check (PRs)
+
+on:
+  pull_request:
+
+jobs:
+  scrub:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scrub check
+        env:
+          SCRUB_TERMS: ${{ secrets.SCRUB_TERMS }}
+        run: |
+          if [ -z "$SCRUB_TERMS" ]; then
+            echo "::warning::SCRUB_TERMS secret not set, so the scrub check was skipped."
+          else
+            python3 scripts/scrub_check.py --all
+          fi
+      - name: Site builds
+        run: python3 scripts/build_site.py

@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verification growth</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌱</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..900,0..1,0..1,0..1&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<script src="vendor/marked.umd.js"></script>
+<style>
+  .gapcols{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:18px; }
+  @media (max-width:860px){ .gapcols{ grid-template-columns:1fr; } }
+  .gapcol h3{ display:flex; align-items:center; gap:8px; }
+  .gapcol .count{ color:var(--muted); font-size:13.5px; margin:2px 0 8px; }
+  .gapcol li{ font-size:14.5px; flex-direction:column; gap:2px !important; }
+  .gapcol li .st{ font-size:12px; color:var(--muted); }
+  .gapcol li.recurring{ border-left:3px solid var(--rose); padding-left:10px; }
+  .gapcol li.new{ border-left:3px solid var(--amber); padding-left:10px; }
+  .gapcol li.open{ border-left:3px solid var(--faint); padding-left:10px; }
+  .gapcol li.closing{ border-left:3px solid var(--auto); padding-left:10px; color:var(--muted); }
+  .trend{ display:flex; gap:12px; align-items:center; color:var(--muted); font-size:14px; margin-top:14px; flex-wrap:wrap; }
+  .ctx{ white-space:pre-wrap; margin:0; }
+  .lanebar{ display:grid; grid-template-columns:120px 1fr 34px; gap:10px; align-items:center; font-size:14px; padding:4px 0; }
+  .lanebar .bar{ height:10px; border-radius:6px; background:var(--hair); overflow:hidden; display:flex; }
+  .lanebar .bar i{ display:block; height:100%; }
+  .wave{ overflow-x:auto; }
+  .agents{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
+  @media (max-width:860px){ .agents{ grid-template-columns:1fr; } }
+  .pair{ border:1px solid var(--hair); border-top:3px solid var(--c); border-radius:14px; padding:14px 16px; background:var(--raised); }
+  .pair .who{ font-weight:600; margin-top:10px; }
+  .pair p{ margin:2px 0 8px; font-size:14px; color:var(--muted); }
+  .rep-body{ max-height:520px; overflow:auto; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header class="page">
+    <div>
+      <h1>How you're growing</h1>
+      <p class="lede">Everything here comes from files in the repo: the coaches' records, your weekly reports, the knowledge base and your practice history. Change a file and the page follows.</p>
+    </div>
+    <p class="sub mono" id="built"></p>
+  </header>
+
+  <div class="stats" style="margin-bottom:18px">
+    <div class="stat"><div class="n" id="sGaps">–</div><div class="l">open gaps</div></div>
+    <div class="stat"><div class="n" id="sProven">–</div><div class="l">confirmed in sessions</div></div>
+    <a class="stat" href="kb.html"><div class="n" id="sKb">–</div><div class="l">KB notes proven</div></a>
+    <a class="stat" href="practice.html"><div class="n" id="sDue">–</div><div class="l">cards to practise today</div></a>
+  </div>
+
+  <div class="grid2">
+    <section class="card">
+      <header><h2>Where you are</h2><span class="sub" id="ctxSub"></span></header>
+      <p class="ctx" id="ctx"></p>
+    </section>
+    <section class="card">
+      <header><h2>Next up</h2><span class="sub" id="nextSub"></span></header>
+      <ul class="clean" id="next"></ul>
+    </section>
+  </div>
+
+  <section class="card">
+    <header><div><h2>Gaps, by coach</h2><p class="sub" id="gapSub">From records/gap_analysis.md</p></div>
+      <div class="row sub"><span class="dot" style="background:var(--rose)"></span>recurring <span class="dot" style="background:var(--amber)"></span>new <span class="dot" style="background:var(--faint)"></span>open <span class="dot" style="background:var(--auto)"></span>closing</div></header>
+    <div class="gapcols" id="gaps"></div>
+    <div class="trend" id="trend"></div>
+  </section>
+
+  <section class="card">
+    <header><div><h2>Sessions</h2><p class="sub">Each column is a logged session. Dots show what it confirmed (filled) and what it set as next tasks (rings), by lane.</p></div></header>
+    <div class="wave" id="wave"></div>
+    <div id="sessions" style="margin-top:10px"></div>
+  </section>
+
+  <div class="grid2">
+    <section class="card">
+      <header><div><h2>Knowledge base</h2><p class="sub">Notes by lane: amber is learning, green is proven, blue is teaching-ready.</p></div><a class="btn" href="kb.html">Open</a></header>
+      <div id="kbBars"></div>
+      <p class="k" style="margin-top:16px">Write these next</p>
+      <ul class="clean" id="kbNext"></ul>
+    </section>
+    <section class="card">
+      <header><div><h2>Confirmed in sessions</h2><p class="sub">“Knowledge Gained” lines from the historian, newest first.</p></div></header>
+      <ul class="clean" id="proof"></ul>
+      <button class="btn quiet" id="proofMore" hidden></button>
+    </section>
+  </div>
+
+  <section class="card">
+    <header><div><h2>Weekly record</h2><p class="sub">Your main record (data/reports/). Agents read these first and trust them over the other files.</p></div></header>
+    <div id="reports"></div>
+  </section>
+
+  <section class="card">
+    <header><div><h2>Your agents</h2><p class="sub">They run in Claude, read this repo and commit their updates here. Copy a prompt to start a session.</p></div></header>
+    <div class="agents" id="agents"></div>
+  </section>
+</main>
+
+<script type="module">
+import { $, el, sv, chrome, manifest, fetchText, fetchJSON, fmtDate, renderMarkdown, LANES, repoInfo, toast, store, today } from "./assets/app.js";
+import { parseGaps, parseHistorian, parseContext, COACHES, AGENTS, laneOf } from "./assets/records.js";
+import { loadCards, loadProgress, buildQueue } from "./assets/srs.js";
+chrome("index.html");
+
+const M = await manifest();
+$("built").textContent = M.built ? `site built ${M.built.replace("T", " ").slice(0, 16)} UTC` : "";
+const [gapsT, histT, ctxT, snaps] = await Promise.all([
+  fetchText("records/gap_analysis.md").catch(() => ""), fetchText("records/project_historian.md").catch(() => ""),
+  fetchText("records/session_context.md").catch(() => ""), fetchJSON("data/gap_snapshots.json", []),
+]);
+const gaps = parseGaps(gapsT), hist = parseHistorian(histT), ctx = parseContext(ctxT);
+
+/* stats */
+const openN = gaps.items.filter(g => g.status !== "closing").length;
+$("sGaps").textContent = openN;
+const knowledge = []; hist.forEach(e => e.knowledge.forEach(t => knowledge.push({ date: e.date, text: t })));
+$("sProven").textContent = knowledge.length;
+const notes = M.notes.filter(n => n.folder);
+const provenN = notes.filter(n => n.status === "proven" || n.status === "teaching-ready").length;
+$("sKb").textContent = `${provenN}/${notes.length}`;
+const cards = await loadCards(M); const q = buildQueue(cards, loadProgress());
+$("sDue").textContent = q.length; store.set("dueToday", { date: today(), n: q.length });
+
+/* context + next */
+$("ctx").textContent = ctx.text || "session_context.md is empty.";
+$("ctxSub").textContent = ctx.date ? `as of ${fmtDate(ctx.date, true)}` : "";
+const lastNext = [...hist].reverse().find(e => e.next.length);
+$("nextSub").textContent = lastNext ? `from the ${fmtDate(lastNext.date)} session` : "";
+const nx = $("next");
+(lastNext ? lastNext.next : []).slice(0, 7).forEach(t => nx.append(el("li", {}, el("span", { class: "tagword next" }, "next"), el("span", {}, t))));
+const pend = [...hist].reverse().find(e => e.progress.some(p => /^pending:/i.test(p)));
+if (pend) pend.progress.filter(p => /^(pending|blocked):/i.test(p) && !/:\s*none\s*$/i.test(p)).forEach(p => {
+  const k = p.split(":")[0].toLowerCase(); nx.append(el("li", {}, el("span", { class: `tagword ${k}` }, k), el("span", {}, p.slice(p.indexOf(":") + 1).trim())));
+});
+if (!nx.children.length) nx.append(el("li", { class: "none" }, "No next tasks logged yet."));
+
+/* gaps */
+const order = { recurring: 0, new: 1, open: 2, closing: 3 }, label = { recurring: "Recurring", new: "New", open: "Still open", closing: "Closing" };
+for (const [gid, c] of Object.entries(COACHES)) {
+  const mine = gaps.items.filter(g => g.owner === gid).sort((a, b) => order[a.status] - order[b.status]);
+  const open = mine.filter(g => g.status !== "closing").length;
+  const li = (g) => el("li", { class: g.status }, el("span", {}, g.text), el("span", { class: "st" }, `${label[g.status]}${g.recur ? `, seen ${g.recur}×` : ""} · ${g.tag}`));
+  const ul = el("ul", { class: "clean" }, mine.filter(g => g.status !== "closing").map(li));
+  if (!mine.length) ul.append(el("li", { class: "none" }, "Nothing tracked for this coach yet."));
+  const closing = mine.filter(g => g.status === "closing");
+  const more = closing.length ? el("details", { class: "x", style: "margin-top:6px" }, el("summary", { class: "sub" }, `${closing.length} closing`), el("ul", { class: "clean body", style: "padding-left:0" }, closing.map(li))) : null;
+  $("gaps").append(el("div", { class: "gapcol" }, el("h3", {}, el("span", { class: "dot", style: `background:${c.color}` }), c.title), el("div", { class: "count" }, `${open} open, ${closing.length} closing`), ul, more));
+}
+$("gapSub").textContent = gaps.date ? `From records/gap_analysis.md, updated ${fmtDate(gaps.date, true)}` : "From records/gap_analysis.md";
+if (snaps.length >= 2) {
+  const w = 160, h = 34, mx = Math.max(...snaps.map(s => s.open), 1);
+  const s = sv("svg", { width: w, height: h, viewBox: `0 0 ${w} ${h}`, "aria-hidden": "true" });
+  const pts = (k) => snaps.map((x, i) => `${(i / (snaps.length - 1)) * (w - 8) + 4},${h - 4 - (x[k] / mx) * (h - 8)}`).join(" ");
+  s.append(sv("polyline", { points: pts("open"), fill: "none", stroke: "var(--muted)", "stroke-width": 1.8, "stroke-linejoin": "round" }));
+  s.append(sv("polyline", { points: pts("closing"), fill: "none", stroke: "var(--auto)", "stroke-width": 1.8, "stroke-linejoin": "round" }));
+  const a = snaps[0], b = snaps[snaps.length - 1];
+  $("trend").append(s, el("span", {}, `Open gaps ${a.open} → ${b.open}, closing ${a.closing} → ${b.closing} (${fmtDate(a.date)} to ${fmtDate(b.date)}). New gaps get found as you go deeper, so watch the green line.`));
+}
+
+/* session waveform */
+const laneIds = ["sv", "dpi", "cpp", "auto", "tools", "debug"];
+{
+  const colW = 54, padL = 104, rowH = 30, H = laneIds.length * rowH + 34, W = Math.max(520, padL + hist.length * colW + 20);
+  const s = sv("svg", { viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: "img", "aria-label": "Sessions by lane" });
+  laneIds.forEach((l, i) => {
+    const y = 14 + i * rowH;
+    s.append(sv("line", { x1: padL - 6, x2: W - 10, y1: y, y2: y, stroke: "var(--hair)" }));
+    const t = sv("text", { x: 0, y: y + 4, "font-size": 12, fill: LANES[l].color }); t.textContent = LANES[l].name; s.append(t);
+  });
+  hist.forEach((e, j) => {
+    const x = padL + j * colW + colW / 2;
+    laneIds.forEach((l, i) => {
+      const y = 14 + i * rowH;
+      const k = e.knowledge.filter(t => laneOf(t) === l).length, n = e.next.filter(t => laneOf(t) === l).length;
+      if (k) s.append(sv("circle", { cx: x - 6, cy: y, r: 3 + Math.min(k, 4) * 1.4, fill: LANES[l].color }));
+      if (n) s.append(sv("circle", { cx: x + 7, cy: y, r: 3 + Math.min(n, 4) * 1.2, fill: "none", stroke: LANES[l].color, "stroke-width": 1.5 }));
+    });
+    const t = sv("text", { x, y: H - 6, "text-anchor": "middle", "font-size": 11, fill: "var(--muted)" }); t.textContent = e.date ? fmtDate(e.date) : "?"; s.append(t);
+  });
+  $("wave").append(s);
+  [...hist].reverse().forEach(e => {
+    const d = el("details", { class: "x" }, el("summary", {}, el("span", { class: "mono sub", style: "min-width:64px" }, fmtDate(e.date)), el("span", {}, `${e.agent}: ${e.title}`)));
+    const body = el("div", { class: "body" });
+    if (e.summary) body.append(el("p", { class: "sub" }, e.summary));
+    const list = (name, items) => items.length ? [el("p", { class: "k", style: "margin-top:10px" }, name), el("ul", {}, items.map(t => el("li", {}, t)))] : [];
+    body.append(...list("Confirmed", e.knowledge), ...list("Completed", e.completed), ...list("Next", e.next));
+    d.append(body); $("sessions").append(d);
+  });
+}
+
+/* KB */
+const byLane = {}; laneIds.forEach(l => byLane[l] = { learning: 0, proven: 0, "teaching-ready": 0 });
+notes.forEach(n => { if (byLane[n.lane]) byLane[n.lane][n.status] = (byLane[n.lane][n.status] || 0) + 1; });
+const mx = Math.max(1, ...laneIds.map(l => Object.values(byLane[l]).reduce((a, b) => a + b, 0)));
+laneIds.forEach(l => {
+  const b = byLane[l], tot = b.learning + b.proven + b["teaching-ready"];
+  if (!tot) return;
+  $("kbBars").append(el("div", { class: "lanebar" }, el("span", { style: `color:${LANES[l].color}` }, LANES[l].name),
+    el("span", { class: "bar", style: `width:${(tot / mx) * 100}%` }, el("i", { style: `width:${b["teaching-ready"] / tot * 100}%;background:var(--sv)` }), el("i", { style: `width:${b.proven / tot * 100}%;background:var(--auto)` }), el("i", { style: `width:${b.learning / tot * 100}%;background:var(--amber)` })),
+    el("span", { class: "mono sub" }, tot)));
+});
+const closingTexts = gaps.items.filter(g => g.status === "closing").map(g => g.text.toLowerCase());
+const writeNext = notes.filter(n => !n.written && n.status === "learning")
+  .map(n => ({ n, score: n.gaps.some(g => closingTexts.some(c => c.includes(g.toLowerCase().slice(0, 30)) || g.toLowerCase().includes(c.slice(0, 30)))) ? 2 : 1 }))
+  .sort((a, b) => b.score - a.score).slice(0, 5);
+writeNext.forEach(({ n, score }) => $("kbNext").append(el("li", {}, el("span", { class: "dot", style: `background:${LANES[n.lane]?.color};margin-top:8px` }),
+  el("span", {}, el("a", { href: `kb.html#${n.slug}` }, n.title), score === 2 ? el("span", { class: "sub" }, " · gap closing, ready to write up") : null))));
+if (!writeNext.length) $("kbNext").append(el("li", { class: "none" }, "Every note has your words in it."));
+
+/* proven list */
+let showAll = false;
+function drawProof() {
+  const ul = $("proof"); ul.replaceChildren();
+  const all = [...knowledge].reverse(), shown = showAll ? all : all.slice(0, 7);
+  shown.forEach(k => ul.append(el("li", {}, el("span", { class: "mono sub", style: "min-width:52px" }, fmtDate(k.date)), el("span", { class: "dot", style: `background:${LANES[laneOf(k.text)].color};margin-top:8px` }), el("span", { style: "font-size:14.5px" }, k.text))));
+  if (!all.length) ul.append(el("li", { class: "none" }, "Nothing confirmed yet."));
+  $("proofMore").hidden = all.length <= 7; $("proofMore").textContent = showAll ? "Show recent only" : `Show all ${all.length}`;
+}
+$("proofMore").onclick = () => { showAll = !showAll; drawProof(); }; drawProof();
+
+/* reports */
+[...M.reports].sort((a, b) => b.date.localeCompare(a.date)).forEach(r => {
+  const body = el("div", { class: "body rep-body" });
+  const d = el("details", { class: "x" }, el("summary", {}, el("span", { class: "mono sub", style: "min-width:64px" }, fmtDate(r.date)), el("span", {}, r.title), r.kind !== "weekly" ? el("span", { class: "pill" }, r.kind) : null), body);
+  d.addEventListener("toggle", async () => { if (d.open && !body.childElementCount) { const t = await fetchText(r.path); await renderMarkdown(body, t.replace(/^---[\s\S]*?---\s*/, "")); } }, { once: false });
+  $("reports").append(d);
+});
+if (!M.reports.length) $("reports").append(el("p", { class: "none" }, "No reports yet. Add markdown files to data/reports/."));
+
+/* agents */
+const { owner, repo } = repoInfo();
+const PROMPTS = {
+  coach: (a) => `/${a.id} Read records/, data/reports/ (newest first, trust these most), data/daily/ and kb/ in the GitHub repo ${owner}/${repo}. Give me a short growth read for your lane: what's growing, the gap to watch, one next step sized for one session, and one check-yourself question. When we finish, update records/ and any kb/ note statuses in the repo and commit.`,
+  reviewer: (a) => `/${a.id} Read records/ and kb/ in the GitHub repo ${owner}/${repo}. Show me recurring issue patterns in your lane, their impact, one self-check before my next review, and a 6-line spot-the-bug snippet. If I explain a kb/ note back to you correctly, mark it proven and commit.`,
+};
+for (const [gid, c] of Object.entries(COACHES)) {
+  const pair = el("div", { class: "pair", style: `--c:${c.color}` }, el("h3", {}, c.title), el("p", {}, c.scope));
+  AGENTS.filter(a => a.group === gid).forEach(a => pair.append(el("div", { class: "who" }, a.name),
+    el("p", {}, a.kind === "coach" ? "Growth read, next step, a check question." : "Patterns, impact, spot-the-bug. Marks KB notes proven."),
+    el("button", { class: "btn", onclick: async () => { try { await navigator.clipboard.writeText(PROMPTS[a.kind](a)); toast("Prompt copied. Paste it into a Claude chat in your DV project."); } catch { prompt("Copy this prompt:", PROMPTS[a.kind](a)); } } }, "Copy prompt")));
+  $("agents").append(pair);
+}
+</script>
+</body>
+</html>

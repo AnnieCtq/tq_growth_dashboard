@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RAL access walkthrough: frontdoor vs backdoor</title>
+<meta name="description" content="Step a reg.write() and reg.read() hop by hop through map, adapter, bus UVC, DUT and predictor, then compare with backdoor.">
+<link rel="stylesheet" href="../../assets/style.css">
+<script>try{const t=JSON.parse(localStorage.getItem("tqg:theme"));if(t)document.documentElement.dataset.theme=t}catch{}</script>
+<style>
+  body{ background:var(--surface); } .wrap{ padding:20px; max-width:1020px; }
+  svg{ width:100%; height:auto; background:var(--raised); border:1px solid var(--hair); border-radius:14px; }
+  .node rect{ fill:var(--surface); stroke:var(--faint); stroke-width:1.5; transition:all .2s; }
+  .node.on rect{ fill:var(--sv-wash); stroke:var(--sv); stroke-width:2.5; }
+  .node.skip rect{ opacity:.35; stroke-dasharray:4 4; }
+  .node text{ font-size:13px; fill:var(--ink); text-anchor:middle; } .node text.s{ font-size:11px; fill:var(--muted); font-family:var(--mono); }
+  .edge{ stroke:var(--faint); stroke-width:1.5; fill:none; } .edge.on{ stroke:var(--sv); stroke-width:3; }
+  .say{ background:var(--raised); border:1px solid var(--hair); border-radius:12px; padding:12px 14px; margin-top:12px; min-height:84px; }
+  .mir{ display:flex; gap:12px; flex-wrap:wrap; margin-top:10px; font-family:var(--mono); font-size:14px; }
+  .mir span{ background:var(--raised); border:1px solid var(--hair); border-radius:10px; padding:6px 10px; }
+  .mir span.bad{ border-color:var(--rose); background:var(--rose-wash); }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <h2>What happens inside <span class="mono">reg.write()</span></h2>
+  <p class="sub">Pick an access, then step through it hop by hop. Before each step, predict which class acts next.</p>
+  <div class="row" style="margin:12px 0" id="modes"></div>
+  <div class="row" style="margin-bottom:10px;font-size:14.5px">
+    <label><input type="checkbox" id="pred" checked> explicit predictor on the bus monitor</label>
+    <label style="margin-left:14px"><input type="checkbox" id="ro"> target register is <b>RO</b> in the DUT</label>
+  </div>
+  <svg id="d" viewBox="0 0 980 300" role="img" aria-label="RAL path"></svg>
+  <div class="say" id="say"></div>
+  <div class="mir" id="mir"></div>
+  <div class="row" style="margin-top:12px"><button class="btn" id="prev">← Back</button><button class="btn primary" id="next">Next →</button><button class="btn quiet" id="reset">Restart</button><span class="sub" id="pos"></span></div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const NS = "http://www.w3.org/2000/svg";
+const mk = (t, a, txt) => { const n = document.createElementNS(NS, t); for (const k in a) n.setAttribute(k, a[k]); if (txt != null) n.textContent = txt; return n; };
+const NODES = {
+  seq:  [80, 60, "sequence / test", "reg.write(st, 'hA5)"],
+  reg:  [250, 60, "uvm_reg (model)", "mirror / desired"],
+  map:  [420, 60, "uvm_reg_map", "addr, offset"],
+  adp:  [590, 60, "adapter", "reg2bus / bus2reg"],
+  sqr:  [760, 60, "bus sequencer", "item queued"],
+  drv:  [900, 150, "bus driver", "drives pins"],
+  dut:  [760, 240, "DUT", "decode + policy + flop"],
+  mon:  [590, 240, "bus monitor", "observes item"],
+  prd:  [420, 240, "uvm_reg_predictor", "bus2reg → predict()"],
+  hdl:  [250, 240, "hdl_path backdoor", "DPI / uvm_hdl_*"],
+};
+const EDGES = [["seq","reg"],["reg","map"],["map","adp"],["adp","sqr"],["sqr","drv"],["drv","dut"],["dut","mon"],["mon","prd"],["prd","reg"],["reg","hdl"],["hdl","dut"]];
+const MODES = {
+  fw: { name: "Frontdoor write", steps: (o) => [
+    ["seq","reg", "The test calls <code>reg.write(status, 'hA5)</code> on the register model. Nothing touches the DUT yet."],
+    ["reg","map", "The register asks its <b>map</b> to do the access. The map knows the register's address in this address space."],
+    ["map","adp", "The map builds a <code>uvm_reg_bus_op</code> {kind=WRITE, addr, data='hA5} and calls the adapter's <code>reg2bus()</code>."],
+    ["adp","sqr", "<code>reg2bus()</code> turns that generic op into the <b>bus UVC's own sequence item</b>, which is started on the bus sequencer."],
+    ["sqr","drv", "The bus driver gets the item, like any other sequence item."],
+    ["drv","dut", o.ro ? "The driver drives the bus protocol. The DUT's <b>address decode</b> finds the register, but its <b>access policy is RO</b>, so the write is ignored. Only a frontdoor access can expose this." : "The driver drives the bus protocol. The DUT's <b>address decode</b> and <b>access policy</b> are exercised, and the flop updates."],
+    ["dut","mon", "The bus monitor sees the transaction on the pins, exactly like any other traffic."],
+    ...(o.pred ? [["mon","prd", "The monitor broadcasts the item to the <b>predictor</b>, which calls <code>bus2reg()</code> to recover the address and data."],
+                  ["prd","reg", o.ro ? "The predictor calls <code>predict()</code>. Because the model knows the field is RO, the mirror <b>keeps its old value</b> and model and DUT agree. If the model wrongly said RW, a later mirror check would catch it." : "The predictor calls <code>predict('hA5)</code> and the <b>mirror</b> now matches the DUT."]]
+               : [["adp","reg", o.ro ? "With auto-predict, the map updates the mirror from what it <i>sent</i>, filtered through the <b>model's</b> access policy. The model says RO, so the mirror stays 'h00. If the model and the DUT disagreed on the policy, you'd only find out on a later read check." : "With auto-predict, the map updates the mirror from what it <i>sent</i>, not from what the bus did. Traffic the model didn't start would leave the mirror stale."]]),
+  ], mirror: (o) => ({ dut: o.ro ? "'h00" : "'hA5", mirror: o.ro ? "'h00" : "'hA5" }) },
+  fr: { name: "Frontdoor read", steps: (o) => [
+    ["seq","reg", "<code>reg.read(status, value)</code>."],
+    ["reg","map", "The map resolves the address."],
+    ["map","adp", "<code>reg2bus()</code> builds a READ bus item."],
+    ["adp","sqr", "The item is started on the bus sequencer."],
+    ["sqr","drv", "The driver runs the read cycle."],
+    ["drv","dut", "The DUT decodes the address and returns data (and maybe a side effect, such as clear-on-read)."],
+    ["drv","adp", "The response comes back: <code>bus2reg()</code> fills <code>rw.data</code> and <code>rw.status</code>, and <code>value</code> is returned to the test."],
+    ...(o.pred ? [["dut","mon", "The monitor observes the read too."], ["mon","prd", "The predictor sees the read data and updates the mirror (and models clear-on-read side effects)."], ["prd","reg", "Mirror = what the DUT returned. A <code>mirror(UVM_CHECK)</code> compares them."]] : []),
+  ], mirror: () => ({ dut: "'hA5", mirror: "'hA5" }) },
+  bw: { name: "Backdoor write", steps: (o) => [
+    ["seq","reg", "<code>reg.write(status, 'h3C, UVM_BACKDOOR)</code>."],
+    ["reg","hdl", "No map, adapter or bus. The model uses the register's <b>hdl_path</b> string."],
+    ["hdl","dut", "<code>uvm_hdl_deposit</code> (via DPI/VPI) writes the <b>flop directly</b>. The bus interface, address decode and access policy are all <b>skipped</b>." + (o.ro ? " Even an RO register gets the value, which hardware could never do." : "") + " It takes zero time, which is why it's used for preloading and checking many registers quickly."],
+    ["hdl","reg", "The mirror is updated directly from the value written. A wrong hdl_path would fail here at <b>runtime</b>, not compile time."],
+  ], mirror: (o) => ({ dut: "'h3C", mirror: "'h3C" }) },
+};
+let mode = "fw", i = -1;
+const opt = () => ({ pred: $("pred").checked, ro: $("ro").checked });
+for (const [k, m] of Object.entries(MODES)) { const b = document.createElement("button"); b.className = "chip"; b.textContent = m.name; b.dataset.k = k; b.onclick = () => { mode = k; i = -1; draw(); }; $("modes").append(b); }
+function draw() {
+  const steps = MODES[mode].steps(opt()), st = steps[i];
+  [...$("modes").children].forEach(b => b.setAttribute("aria-pressed", String(b.dataset.k === mode)));
+  const d = $("d"); d.replaceChildren();
+  const used = new Set(steps.flatMap(s => [s[0], s[1]]));
+  const doneEdges = new Set(steps.slice(0, i + 1).map(s => s[0] + ">" + s[1]));
+  EDGES.concat([["drv","adp"],["adp","reg"],["hdl","reg"]]).forEach(([a, b]) => {
+    const on = doneEdges.has(a + ">" + b); if (!on && !EDGES.some(e => e[0] === a && e[1] === b)) return;
+    const [x1, y1] = NODES[a], [x2, y2] = NODES[b];
+    d.append(mk("path", { d: `M ${x1} ${y1} L ${x2} ${y2}`, class: "edge" + (on ? " on" : "") }));
+  });
+  for (const [k, [x, y, t, s]] of Object.entries(NODES)) {
+    const g = mk("g", { class: "node" + (st && (st[1] === k) ? " on" : "") + (used.has(k) ? "" : " skip") });
+    g.append(mk("rect", { x: x - 72, y: y - 26, width: 144, height: 52, rx: 12 })); g.append(mk("text", { x, y: y - 3 }, t)); g.append(mk("text", { x, y: y + 14, class: "s" }, s));
+    d.append(g);
+  }
+  $("say").innerHTML = st ? `<b>${i + 1}.</b> ${st[2]}` : "Press <b>Next</b>. Greyed-out boxes take no part in this kind of access, and that's half the lesson.";
+  const m = MODES[mode].mirror(opt());
+  $("mir").innerHTML = i >= steps.length - 1 ? `<span>DUT flop: ${m.dut}</span><span class="${m.dut !== m.mirror.split(" ")[0] ? "bad" : ""}">mirror: ${m.mirror}</span>` : "";
+  $("pos").textContent = `${i + 1} / ${steps.length}`;
+  $("prev").disabled = i < 0; $("next").disabled = i >= steps.length - 1;
+}
+$("next").onclick = () => { const n = MODES[mode].steps(opt()).length; if (i < n - 1) { i++; draw(); } };
+$("prev").onclick = () => { if (i >= 0) { i--; draw(); } };
+$("reset").onclick = () => { i = -1; draw(); };
+$("pred").onchange = $("ro").onchange = () => { i = -1; draw(); };
+addEventListener("keydown", (e) => { if (e.key === "ArrowRight") $("next").click(); if (e.key === "ArrowLeft") $("prev").click(); });
+draw();
+</script>
+</body>
+</html>

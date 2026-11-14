@@ -1,0 +1,77 @@
+{
+  "deck": "tools",
+  "cards": [
+    {
+      "id": "t-reg-1",
+      "lane": "auto",
+      "type": "explain",
+      "front": "Stages of the nightly regression, trigger to signature mail.",
+      "back": "cron → limit check → sync → build flow → LSF submit → simulate → parse logs → merge coverage → signature mail → **release limit**. Know where the log is at each stage.",
+      "note": "tools/regression-flow",
+      "author": "claude"
+    },
+    {
+      "id": "t-reg-2",
+      "lane": "auto",
+      "type": "explain",
+      "front": "The wrapper crashes after LSF submit. What releases the limit?",
+      "back": "Prove it from the script. If release only happens at the end, nothing does: the limit stays locked. Fixes: a `trap` on exit, a watchdog, or stale-lock detection.",
+      "note": "tools/regression-flow",
+      "author": "claude"
+    },
+    {
+      "id": "t-reg-3",
+      "lane": "auto",
+      "type": "explain",
+      "front": "cron fires while last night's run is still going. What should happen?",
+      "back": "Decide **explicitly**: skip, queue or kill. Implement it with a lock file or PID check rather than relying on LSF side effects, then verify the behaviour.",
+      "note": "tools/regression-flow",
+      "author": "claude"
+    },
+    {
+      "id": "t-p4-1",
+      "lane": "tools",
+      "type": "recall",
+      "front": "Why does a shelve regression need its base changelist?",
+      "back": "A shelve is a set of **changes relative to its base**, so it only applies cleanly onto that base.",
+      "note": "tools/perforce-shelves",
+      "author": "claude"
+    },
+    {
+      "id": "t-p4-2",
+      "lane": "tools",
+      "type": "recall",
+      "front": "Why a release branch instead of mainline at a label?",
+      "back": "The milestone needs a **pinned version** that can still take targeted fixes while mainline moves on.",
+      "note": "tools/perforce-shelves",
+      "author": "claude"
+    },
+    {
+      "id": "t-merge-1",
+      "lane": "tools",
+      "type": "explain",
+      "front": "Merging coverage from runs compiled from **different RTL**: what's the issue?",
+      "back": "The coverage models differ: bins or covergroups were added, removed or changed. A strict merge refuses or drops data. A flexible merge applies rules (e.g. union of items) so changed models can be combined.",
+      "note": "tools/coverage-merge",
+      "author": "claude"
+    },
+    {
+      "id": "t-merge-2",
+      "lane": "tools",
+      "type": "recall",
+      "front": "Why keep a .vdb retention and backup policy?",
+      "back": "Accumulated coverage is **expensive to regenerate**, and one deletion can wipe months.",
+      "note": "tools/coverage-merge",
+      "author": "claude"
+    },
+    {
+      "id": "t-mig-1",
+      "lane": "tools",
+      "type": "explain",
+      "front": "Name two concrete things that break when moving a flow from VCS to Xcelium.",
+      "back": "Compile, elaborate and run **switches** (different command-line options and flow), and **coverage database format/tools** (.vdb/URG vs the Xcelium coverage DB and tools). Also environment/bootenv and some PLI/DPI build details.",
+      "note": "tools/vcs-vs-xcelium",
+      "author": "claude"
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+# Session context
+**Date:** 2026-10-29
+
+<!-- Latest compressed context (overwrite each session). -->
+
+Junior DV engineer and regression owner (multimedia degree, 3 months DV study, 5 months DE, DV role since mid-July). Interim ratings on 28 Oct: UVM 2, coverage 2, debug 2, automation 2.5, habits 3. October brought the first testbench evidence: the blk_status multi-instance checker fix (judged DUT, but the fix appears to be in the checker binding, so re-judge) and ACC_BE frontdoor RAL work done without yet understanding the mechanism. Now running a 3-day guided project in a personal sandbox: rebuild ACC frontdoor access with the existing ACC register model and the sideband-bus (SB) UVC. Day 1 (29 Oct) trace the map and SB item, write the adapter, diff with the team's; Day 2 (30 Oct) map-sequencer hookup, predictor, check sequence on RW, RO and side-effect registers; Day 3 (2 Nov) frontdoor vs backdoor experiments and four injected bugs written up as trigger, root cause, DUT or TB, fix. Still open: Week 1 sign-off sentence, what frontdoor verifies, why bound copies see their own clock, and what "lost one week of regression" meant. Keep a short daily regression check during the project.

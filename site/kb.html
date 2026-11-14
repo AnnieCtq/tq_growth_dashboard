@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Knowledge · Verification growth</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌱</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..900,0..1,0..1,0..1&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<script src="vendor/marked.umd.js"></script>
+<style>
+  .kb{ display:grid; grid-template-columns:290px minmax(0,1fr); gap:18px; align-items:start; }
+  @media (max-width:900px){ .kb{ grid-template-columns:1fr; } }
+  aside.side{ position:sticky; top:64px; max-height:calc(100vh - 80px); overflow:auto; padding:16px; }
+  @media (max-width:900px){ aside.side{ position:static; max-height:none; } }
+  .side h3{ font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:16px 0 4px; }
+  .side a.n{ display:flex; gap:8px; align-items:center; padding:6px 8px; border-radius:9px; text-decoration:none; color:var(--ink); font-size:14.5px; line-height:1.3; }
+  .side a.n:hover{ background:var(--raised); } .side a.n[aria-current="true"]{ background:var(--raised); box-shadow:inset 0 0 0 1px var(--faint); }
+  .side a.n .st{ margin-left:auto; width:8px; height:8px; border-radius:50%; flex:none; }
+  .st.learning{ background:var(--amber); } .st.proven{ background:var(--auto); } .st.teaching-ready{ background:var(--sv); }
+  .side a.n.unwritten{ color:var(--muted); }
+  .meta{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:8px 0 4px; }
+  .gapline{ font-size:13.5px; color:var(--muted); margin:2px 0; }
+  .ix{ display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:12px; }
+  .ix a{ display:block; padding:14px 16px; border:1px solid var(--hair); border-radius:14px; background:var(--raised); text-decoration:none; color:var(--ink); }
+  .ix a:hover{ border-color:var(--faint); } .ix a b{ display:block; margin-bottom:4px; } .ix a span{ font-size:13.5px; color:var(--muted); }
+  iframe.embed{ width:100%; height:600px; border:1px solid var(--hair); border-radius:14px; background:var(--surface); }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="kb">
+    <aside class="card side" aria-label="Notes">
+      <input type="text" id="q" placeholder="Search notes…" aria-label="Search notes">
+      <div class="row" style="margin-top:10px" id="stf"></div>
+      <div id="list"></div>
+    </aside>
+    <section class="card" id="view" aria-live="polite"></section>
+  </div>
+</main>
+
+<script type="module">
+import { $, el, chrome, manifest, fetchText, frontmatter, renderMarkdown, LANES, repoInfo, fmtDate } from "./assets/app.js";
+chrome("kb.html");
+const M = await manifest();
+const notes = M.notes;
+const bySlug = Object.fromEntries(notes.map(n => [n.slug, n]));
+const FOLDERS = [["concepts", "Concepts"], ["tools", "Tools & flows"], ["debug-playbooks", "Debug playbooks"], ["", "Reference"]];
+let statusFilter = null;
+
+["learning", "proven", "teaching-ready"].forEach(s => $("stf").append(el("button", { class: "chip", "aria-pressed": "false", onclick: (e) => {
+  statusFilter = statusFilter === s ? null : s; [...$("stf").children].forEach(b => b.setAttribute("aria-pressed", String(b === e.target && statusFilter === s))); drawList(); } }, s)));
+$("q").oninput = drawList;
+
+function drawList() {
+  const q = $("q").value.toLowerCase().trim(), cur = location.hash.slice(1) || "";
+  const box = $("list"); box.replaceChildren();
+  box.append(el("h3", {}, "Start"), el("a", { class: "n", href: "#", "aria-current": String(!cur) }, "Overview & interactive diagrams"));
+  FOLDERS.forEach(([f, name]) => {
+    const items = notes.filter(n => n.folder === f && (!statusFilter || n.status === statusFilter) && (!q || (n.title + " " + n.gaps.join(" ")).toLowerCase().includes(q)));
+    if (!items.length) return;
+    box.append(el("h3", {}, name));
+    items.forEach(n => box.append(el("a", { class: "n" + (n.folder && !n.written ? " unwritten" : ""), href: `#${n.slug}`, "aria-current": String(cur === n.slug), title: n.folder && !n.written ? "Not written in your words yet" : "" },
+      n.lane ? el("span", { class: "dot", style: `background:${LANES[n.lane]?.color || "var(--faint)"}` }) : null, n.title, n.status ? el("span", { class: `st ${n.status}`, title: n.status }) : null)));
+  });
+}
+
+async function show() {
+  const slug = decodeURIComponent(location.hash.slice(1));
+  drawList();
+  const v = $("view"); v.replaceChildren();
+  if (!slug || !bySlug[slug]) return overview(v);
+  const n = bySlug[slug];
+  const raw = await fetchText(n.path);
+  const { data, body } = frontmatter(raw);
+  const { owner, repo } = repoInfo();
+  v.append(el("div", { class: "row", style: "justify-content:space-between" },
+    el("h1", { style: "font-size:30px;margin:0" }, n.title),
+    el("div", { class: "row" },
+      n.cards.length ? el("a", { class: "btn", href: `practice.html#note=${encodeURIComponent(n.path.replace(/^kb\//, "").replace(/\.md$/, ""))}` }, `Practise ${n.cards.length} cards`) : null,
+      el("a", { class: "btn", href: `https://github.com/${owner}/${repo}/edit/main/${n.path}`, target: "_blank", rel: "noopener" }, "Edit on GitHub"))));
+  if (n.status || n.lane) v.append(el("div", { class: "meta" },
+    n.status ? el("span", { class: `pill ${n.status}` }, n.status) : null,
+    n.lane ? el("span", { class: "pill" }, el("span", { class: "dot", style: `background:${LANES[n.lane]?.color}` }), LANES[n.lane]?.name || n.lane) : null,
+    n.folder && !n.written ? el("span", { class: "pill learning" }, "your words: not written yet") : null,
+    n.updated ? el("span", { class: "sub" }, `updated ${fmtDate(n.updated, true)}`) : null));
+  if (n.gaps.length) { v.append(el("p", { class: "k", style: "margin-top:12px" }, "Closes gaps")); n.gaps.forEach(g => v.append(el("p", { class: "gapline" }, "· " + g))); }
+  if (n.interactive) {
+    const src = "kb/" + n.interactive;
+    const frame = el("iframe", { class: "embed", title: "Interactive diagram", src });
+    frame.addEventListener("load", () => { try { const doc = frame.contentDocument; const fit = () => frame.style.height = (doc.documentElement.scrollHeight + 4) + "px"; fit(); new ResizeObserver(fit).observe(doc.body); } catch {} });
+    v.append(el("details", { class: "x", style: "margin-top:14px", open: true }, el("summary", {}, el("strong", {}, "▶ Interactive diagram"), el("a", { href: src, target: "_blank", class: "sub" }, "open full page")), el("div", { class: "body", style: "padding-left:0" }, frame)));
+  }
+  const md = el("div");
+  v.append(md);
+  await renderMarkdown(md, body, { base: n.path.split("/").slice(0, -1).join("/"), linkNote: (p) => { const s = p.split("/").pop().replace(/\.md$/, ""); location.hash = s; } });
+  // turn the 'interactive' link inside the body into an in-page jump
+  md.querySelectorAll('a[href$=".html"]').forEach(a => a.target = "_blank");
+  scrollTo({ top: 0 });
+}
+
+async function overview(v) {
+  const readme = await fetchText("kb/README.md");
+  const counts = { learning: 0, proven: 0, "teaching-ready": 0 }; notes.filter(n => n.folder).forEach(n => counts[n.status] = (counts[n.status] || 0) + 1);
+  const written = notes.filter(n => n.folder && n.written).length, total = notes.filter(n => n.folder).length;
+  v.append(el("h1", { style: "font-size:30px;margin:0" }, "Knowledge base"),
+    el("div", { class: "stats", style: "margin:16px 0" },
+      el("div", { class: "stat" }, el("div", { class: "n" }, `${written}/${total}`), el("div", { class: "l" }, "written in your words")),
+      el("div", { class: "stat" }, el("div", { class: "n" }, counts.learning), el("div", { class: "l" }, "learning")),
+      el("div", { class: "stat" }, el("div", { class: "n" }, counts.proven), el("div", { class: "l" }, "proven")),
+      el("div", { class: "stat" }, el("div", { class: "n" }, counts["teaching-ready"]), el("div", { class: "l" }, "teaching-ready"))),
+    el("h2", { style: "margin-top:8px" }, "Interactive diagrams"),
+    el("p", { class: "sub" }, "Play with these before writing the note. Predict what will happen, then check."),
+    el("div", { class: "ix", style: "margin:12px 0 10px" }, M.interactive.map(i => el("a", { href: i.path, target: "_blank" }, el("b", {}, i.title), el("span", {}, i.description)))));
+  const md = el("div"); v.append(md);
+  await renderMarkdown(md, readme.replace(/^# .*\n/, ""), { base: "kb" });
+}
+addEventListener("hashchange", show);
+show();
+</script>
+</body>
+</html>
