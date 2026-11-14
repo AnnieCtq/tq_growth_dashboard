@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clocking block skew playground</title>
+<meta name="description" content="Slide input and output skew and the DUT's change time to see what a clocking block samples and when it drives.">
+<link rel="stylesheet" href="../../assets/style.css">
+<script>try{const t=JSON.parse(localStorage.getItem("tqg:theme"));if(t)document.documentElement.dataset.theme=t}catch{}</script>
+<style>
+  body{ background:var(--surface); } .wrap{ padding:20px; max-width:980px; }
+  .ctl{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; margin:14px 0; } @media (max-width:760px){ .ctl{ grid-template-columns:1fr; } }
+  .ctl label{ font-size:13.5px; color:var(--muted); display:block; } .ctl input{ width:100%; accent-color:var(--sv); } .ctl b{ font-family:var(--mono); color:var(--ink); }
+  svg{ width:100%; height:auto; background:var(--raised); border:1px solid var(--hair); border-radius:14px; }
+  .say{ background:var(--raised); border:1px solid var(--hair); border-radius:12px; padding:12px 14px; margin-top:12px; }
+  pre.code{ background:var(--raised); border:1px solid var(--hair); border-radius:12px; padding:10px 14px; font-size:13.5px; margin:10px 0 0; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <h2>Clocking block: what gets sampled, and when it's driven</h2>
+  <p class="sub">The clock period is 10 ns, with a rising edge at 10 ns. The DUT changes <span class="mono">full</span> at some time near that edge, and the driver drives <span class="mono">wr_en</span> through the clocking block.</p>
+  <pre class="code" id="code"></pre>
+  <div class="ctl">
+    <div><label>DUT changes <span class="mono">full</span> at <b id="tvv"></b></label><input type="range" id="tv" min="6" max="14" step="0.5" value="9.5"></div>
+    <div><label>input skew <b id="isv"></b></label><input type="range" id="is" min="0" max="4" step="0.5" value="0"></div>
+    <div><label>output skew <b id="osv"></b></label><input type="range" id="os" min="0" max="4" step="0.5" value="2"></div>
+  </div>
+  <svg id="w" viewBox="0 0 900 250" role="img" aria-label="Waveform"></svg>
+  <div class="say" id="say"></div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const NS = "http://www.w3.org/2000/svg";
+const mk = (t, a, txt) => { const n = document.createElementNS(NS, t); for (const k in a) n.setAttribute(k, a[k]); if (txt != null) n.textContent = txt; return n; };
+const X = (t) => 90 + (t - 2) * 48; // 2ns..18ns
+function draw() {
+  const tv = +$("tv").value, is = +$("is").value, os = +$("os").value;
+  const isTxt = is === 0 ? "#1step" : `#${is}`;
+  $("tvv").textContent = `${tv} ns`; $("isv").textContent = isTxt; $("osv").textContent = `#${os}`;
+  $("code").textContent = `clocking drv_cb @(posedge clk);\n  default input ${isTxt} output #${os};\n  input  full;\n  output wr_en;\nendclocking`;
+  const w = $("w"); w.replaceChildren();
+  const rows = [["clk", 40], ["full (DUT)", 100], ["wr_en (TB)", 160]];
+  rows.forEach(([n, y]) => { w.append(mk("text", { x: 10, y: y + 5, "font-size": 13, fill: "var(--muted)", "font-family": "var(--mono)" }, n)); w.append(mk("line", { x1: 86, x2: 890, y1: y + 22, y2: y + 22, stroke: "var(--hair)" })); });
+  // clock: period 10, edges at 0,10,20 → rising at 10; show 2..18
+  // high 0-5, low 5-10, high 10-15, low 15-20
+  const p = `M ${X(2)} 24 H ${X(5)} V 60 H ${X(10)} V 24 H ${X(15)} V 60 H ${X(18)}`;
+  w.append(mk("path", { d: p, fill: "none", stroke: "var(--ink)", "stroke-width": 2 }));
+  // edge marker
+  w.append(mk("line", { x1: X(10), x2: X(10), y1: 14, y2: 236, stroke: "var(--sv)", "stroke-dasharray": "4 4" }));
+  w.append(mk("text", { x: X(10) + 4, y: 14, "font-size": 12, fill: "var(--sv)" }, "posedge @10ns"));
+  // full: 0 then 1 at tv
+  const yH = 84, yL = 120;
+  w.append(mk("path", { d: `M ${X(2)} ${yL} H ${X(tv)} V ${yH} H ${X(18)}`, fill: "none", stroke: "var(--auto)", "stroke-width": 2 }));
+  // sample point
+  const tS = is === 0 ? 10 - 0.15 : 10 - is;
+  // #1step sees the value just before the edge; a skew of N sees the value N ns before it
+  const sampledV = is === 0 ? (tv < 10 ? 1 : 0) : (tv <= tS ? 1 : 0);
+  w.append(mk("line", { x1: X(tS), x2: X(tS), y1: 76, y2: 128, stroke: "var(--amber)", "stroke-width": 2 }));
+  w.append(mk("circle", { cx: X(tS), cy: sampledV ? yH : yL, r: 6, fill: "var(--amber)" }));
+  w.append(mk("text", { x: X(tS) - 6, y: 142, "font-size": 12, fill: "var(--amber)", "text-anchor": "end" }, `sampled here → drv_cb.full = ${sampledV}`));
+  // wr_en driven at 10+os
+  const tD = 10 + os;
+  w.append(mk("path", { d: `M ${X(2)} 180 H ${X(tD)} V 144 H ${X(18)}`, fill: "none", stroke: "var(--sv)", "stroke-width": 2 }));
+  w.append(mk("line", { x1: X(10), x2: X(tD), y1: 200, y2: 200, stroke: "var(--sv)" }));
+  w.append(mk("text", { x: X(tD) + 6, y: 205, "font-size": 12, fill: "var(--sv)" }, `drv_cb.wr_en <= 1 lands at ${tD} ns`));
+  // ticks
+  for (let t = 2; t <= 18; t += 2) { w.append(mk("text", { x: X(t), y: 248, "font-size": 11, fill: "var(--muted)", "text-anchor": "middle" }, t)); }
+  let s = `The clocking block samples <b>full</b> at ${is === 0 ? "in the Preponed region of the edge's time slot (#1step: the value just before anything changes at the edge)" : `${is} ns before the edge`} and sees <b>${sampledV}</b>. `;
+  if (is === 0 && tv === 10) s += "The DUT changed full <b>exactly at the edge</b>, but #1step still sees the old value. That's how a clocking block avoids the race with the DUT's flops. ";
+  else if (tv > 10) s += "The DUT changed after the edge, so this cycle sees the old value. The new value appears next cycle. ";
+  else if (!sampledV) s += "The DUT changed inside the input-skew window, so the sample missed it. A large input skew models setup time, but can hide late changes. ";
+  s += `The driver's write is applied ${os} ns after the edge (output skew), so the DUT's flops see it at the <b>next</b> edge, never in a race on this one.`;
+  $("say").innerHTML = s;
+}
+["tv", "is", "os"].forEach(id => $(id).oninput = draw); draw();
+</script>
+</body>
+</html>

@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Practice · Verification growth</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌱</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..900,0..1,0..1,0..1&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<script src="vendor/marked.umd.js"></script>
+<style>
+  .stage{ max-width:760px; margin:0 auto; }
+  .prog{ height:6px; background:var(--hair); border-radius:6px; overflow:hidden; margin:6px 0 18px; }
+  .prog i{ display:block; height:100%; background:var(--auto); transition:width .3s; }
+  .flash{ position:relative; background:var(--raised); border:1px solid var(--hair); border-radius:22px; padding:26px 30px 22px; min-height:280px;
+    box-shadow:0 1px 0 var(--hair), 0 14px 34px -22px rgba(30,40,60,.35); }
+  .flash::before{ content:""; position:absolute; left:0; top:22px; bottom:22px; width:4px; border-radius:0 4px 4px 0; background:var(--c, var(--sv)); }
+  .flash .top{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:14px; }
+  .flash .front{ font-size:19px; line-height:1.5; }
+  .flash .front pre{ font-size:14px; }
+  .flash .back{ margin-top:18px; padding-top:16px; border-top:1px dashed var(--faint); }
+  .flash .back .md{ font-size:16px; }
+  .grades{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:16px; }
+  .grades button{ border:1px solid var(--faint); border-radius:14px; padding:10px 6px; background:var(--raised); cursor:pointer; font-weight:550; }
+  .grades button small{ display:block; font-weight:400; color:var(--muted); font-size:12px; margin-top:2px; }
+  .grades button.again:hover{ border-color:var(--rose); } .grades button.hard:hover{ border-color:var(--amber); } .grades button.good:hover{ border-color:var(--auto); } .grades button.easy:hover{ border-color:var(--sv); }
+  .reveal{ width:100%; margin-top:16px; padding:12px; border-radius:14px; }
+  kbd{ font-size:11.5px; border:1px solid var(--faint); border-bottom-width:2px; border-radius:5px; padding:0 5px; color:var(--muted); }
+  .heat{ display:grid; grid-auto-flow:column; grid-template-rows:repeat(7,12px); gap:3px; overflow-x:auto; padding-bottom:4px; }
+  .heat i{ width:12px; height:12px; border-radius:3px; background:var(--hair); display:block; }
+  .boxes{ display:flex; align-items:flex-end; gap:10px; height:120px; margin-top:6px; }
+  .boxes div{ flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; font-size:12px; color:var(--muted); }
+  .boxes b{ display:block; width:100%; border-radius:6px 6px 0 0; background:var(--sv); min-height:2px; }
+  .done{ text-align:center; padding:30px 10px; }
+  .done .big{ font-size:56px; line-height:1; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header class="page">
+    <div><h1>Daily practice</h1>
+      <p class="lede">A few cards every day. Answer in your head (or type it) <em>before</em> revealing, then grade yourself honestly. Cards you know come back less often; misses come back tomorrow.</p></div>
+    <div class="stats" style="grid-template-columns:repeat(3,auto);gap:10px">
+      <div class="stat"><div class="n" id="streak">0</div><div class="l">day streak</div></div>
+      <div class="stat"><div class="n" id="dueN">0</div><div class="l">left today</div></div>
+      <div class="stat"><div class="n" id="mastered">0</div><div class="l">mastered</div></div>
+    </div>
+  </header>
+
+  <div class="row" style="margin-bottom:12px;justify-content:space-between">
+    <div class="row" id="filters" aria-label="Filter by lane"></div>
+    <div class="row"><span class="status" id="syncStatus"></span><button class="btn" id="syncBtn">Sync progress</button></div>
+  </div>
+
+  <div class="stage">
+    <div class="prog" aria-hidden="true"><i id="progBar" style="width:0"></i></div>
+    <div id="stage"></div>
+  </div>
+
+  <div class="grid2" style="margin-top:26px">
+    <section class="card"><header><div><h2>Practice days</h2><p class="sub">Last 20 weeks</p></div></header><div class="heat" id="heat"></div></section>
+    <section class="card"><header><div><h2>Cards by box</h2><p class="sub">New → mastered. Box 4–5 counts as mastered.</p></div></header><div class="boxes" id="boxes"></div><p class="sub" id="upcoming"></p></section>
+  </div>
+</main>
+
+<script type="module">
+import { $, el, chrome, manifest, fetchJSON, renderMarkdown, LANES, today, addDays, fmtDate, canWrite, ghRead, ghWrite, store, toast } from "./assets/app.js";
+import { loadCards, loadProgress, saveProgress, mergeProgress, buildQueue, grade, streak, INTERVALS } from "./assets/srs.js";
+chrome("practice.html");
+
+const M = await manifest();
+const cards = await loadCards(M);
+const byId = Object.fromEntries(cards.map(c => [c.id, c]));
+let progress = mergeProgress(loadProgress(), await fetchJSON("data/practice/progress.json", { cards: {}, days: {} }));
+saveProgress(progress);
+
+const noteFilter = (location.hash.match(/note=([^&]+)/) || [])[1];
+let lane = null;
+const lanesPresent = [...new Set(cards.map(c => c.lane))];
+lanesPresent.forEach(l => $("filters").append(el("button", { class: "chip", "aria-pressed": "false", "data-l": l, onclick: () => { lane = lane === l ? null : l; [...$("filters").children].forEach(b => b.setAttribute("aria-pressed", String(b.dataset.l === lane))); start(); } },
+  el("span", { class: "dot", style: `background:${LANES[l]?.color || "var(--faint)"};margin-right:4px` }), LANES[l]?.name || l)));
+
+let queue = [], idx = 0, done = 0, total = 0, againOnce = new Set(), revealed = false;
+
+function start() {
+  if (noteFilter) {
+    const n = decodeURIComponent(noteFilter);
+    queue = cards.filter(c => c.note === n);
+  } else queue = buildQueue(cards, progress, { filter: c => !lane || c.lane === lane });
+  idx = 0; done = 0; total = queue.length; againOnce = new Set();
+  draw();
+}
+
+function preview(c, g) {
+  const s = progress.cards[c.id] || { box: 0 };
+  let box = s.box; if (g === "again") box = 1; else if (g === "hard") box = Math.max(1, box); else if (g === "good") box = Math.min(5, box + 1); else box = Math.min(5, box + 2);
+  const days = g === "again" ? 1 : g === "hard" ? Math.max(1, Math.round(INTERVALS[box] / 2)) : INTERVALS[box];
+  return days === 1 ? "tomorrow" : `${days} days`;
+}
+
+async function draw() {
+  stats();
+  $("progBar").style.width = total ? `${(done / total) * 100}%` : "0";
+  const st = $("stage"); st.replaceChildren();
+  if (idx >= queue.length) return finish(st);
+  const c = queue[idx]; revealed = false;
+  const s = progress.cards[c.id];
+  const front = el("div", { class: "front" }), back = el("div", { class: "md" });
+  const answer = c.type === "explain" || c.type === "calc" || c.type === "predict" ? el("textarea", { id: "ans", placeholder: c.type === "explain" ? "Explain it in your own words first…" : "Your answer…", style: "margin-top:14px;min-height:72px" }) : null;
+  const card = el("div", { class: "flash fade-in", style: `--c:${LANES[c.lane]?.color || "var(--sv)"}` },
+    el("div", { class: "top" },
+      el("span", { class: "pill" }, el("span", { class: "dot", style: `background:${LANES[c.lane]?.color}` }), LANES[c.lane]?.name || c.lane),
+      el("span", { class: "pill" }, c.type),
+      el("span", { class: "sub" }, s ? `box ${s.box} · seen ${s.reps}×` : "new"),
+      el("span", { class: "sub", style: "margin-left:auto" }, `${idx + 1} / ${queue.length}`)),
+    front, answer,
+    el("button", { class: "btn primary reveal", id: "revealBtn", onclick: reveal }, "Reveal ", el("kbd", {}, answer ? "Ctrl/⌘ + Enter" : "space")),
+    el("div", { class: "back", id: "back", hidden: true }, back,
+      c.note && c.note !== "glossary" ? el("p", { class: "sub", style: "margin-top:10px" }, el("a", { href: `kb.html#${c.note.split("/").pop()}` }, "Open the KB note →")) : null,
+      el("div", { class: "grades" }, ["again", "hard", "good", "easy"].map((g, i) => el("button", { class: g, onclick: () => rate(g) }, g[0].toUpperCase() + g.slice(1), " ", el("kbd", {}, i + 1), el("small", {}, preview(c, g)))))));
+  st.append(card);
+  await renderMarkdown(front, c.front); await renderMarkdown(back, c.back);
+  (answer || $("revealBtn")).focus();
+}
+function reveal() { if (revealed || idx >= queue.length) return; revealed = true; $("back").hidden = false; $("revealBtn").hidden = true; }
+function rate(g) {
+  if (!revealed) return;
+  const c = queue[idx];
+  progress = grade(progress, c.id, g); saveProgress(progress);
+  if (g === "again" && !againOnce.has(c.id)) { againOnce.add(c.id); queue.push(c); total++; }
+  idx++; done++; draw();
+}
+document.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "TEXTAREA" && !(e.key === "Enter" && (e.metaKey || e.ctrlKey))) return;
+  if (e.key === " " || (e.key === "Enter" && (e.metaKey || e.ctrlKey))) { if (!revealed) { e.preventDefault(); reveal(); } }
+  else if (revealed && ["1", "2", "3", "4"].includes(e.key)) rate(["again", "hard", "good", "easy"][+e.key - 1]);
+});
+
+function finish(st) {
+  const dd = progress.days[today()];
+  st.append(el("div", { class: "flash done fade-in" },
+    el("div", { class: "big" }, total ? "🌱" : "☕"),
+    el("h2", { style: "margin-top:10px" }, total ? "Done for today" : "Nothing due right now"),
+    el("p", { class: "sub" }, total ? `${done} reviews, ${dd ? dd.again : 0} to see again tomorrow. Streak: ${streak(progress)} day${streak(progress) === 1 ? "" : "s"}.` : "Come back tomorrow, or pick a lane above to pull more cards."),
+    el("div", { class: "row", style: "justify-content:center;margin-top:14px" },
+      el("a", { class: "btn", href: "kb.html" }, "Write a KB note"),
+      noteFilter ? el("a", { class: "btn", href: "practice.html" }, "Back to daily cards") : null)));
+  if (total && canWrite()) sync(true);
+}
+
+function stats() {
+  const left = noteFilter ? queue.length - idx : buildQueue(cards, progress).length;
+  $("streak").textContent = streak(progress);
+  $("dueN").textContent = Math.max(0, left);
+  store.set("dueToday", { date: today(), n: noteFilter ? buildQueue(cards, progress).length : Math.max(0, left) });
+  $("mastered").textContent = Object.values(progress.cards).filter(s => s.box >= 4).length;
+  // heatmap
+  const heat = $("heat"); heat.replaceChildren();
+  const end = today(), dow = new Date().getDay(); const startD = addDays(end, -(7 * 19 + dow));
+  for (let d = startD; d <= end; d = addDays(d, 1)) { const n = progress.days[d]?.done || 0; heat.append(el("i", { title: `${fmtDate(d, true)}: ${n} cards`, style: n ? `background:color-mix(in srgb, var(--auto) ${Math.min(100, 30 + n * 6)}%, var(--hair))` : "" })); }
+  // boxes
+  const counts = [0, 0, 0, 0, 0, 0]; cards.forEach(c => counts[progress.cards[c.id]?.box || 0]++);
+  const mx = Math.max(1, ...counts);
+  $("boxes").replaceChildren(...counts.map((n, b) => el("div", {}, el("span", {}, n), el("b", { style: `height:${(n / mx) * 90}px;opacity:${0.35 + b * 0.13}` }), el("span", {}, b === 0 ? "new" : `box ${b}`))));
+  const next7 = []; for (let i = 1; i <= 7; i++) { const d = addDays(today(), i); next7.push(Object.values(progress.cards).filter(s => s.due === d).length); }
+  $("upcoming").textContent = `Coming up over the next 7 days: ${next7.join(" · ")} reviews. ${cards.length} cards in total, including your ✔ glossary rows.`;
+}
+
+async function sync(quiet) {
+  if (!canWrite()) { toast("Connect a GitHub token (top right) to sync progress across devices."); return; }
+  $("syncStatus").textContent = "Syncing…"; $("syncStatus").className = "status";
+  try {
+    const remote = await ghRead("data/practice/progress.json");
+    progress = mergeProgress(progress, remote ? JSON.parse(remote.text) : { cards: {}, days: {} });
+    saveProgress(progress);
+    await ghWrite("data/practice/progress.json", JSON.stringify(progress, null, 1) + "\n", `practice: ${today()}`);
+    $("syncStatus").textContent = quiet ? "Progress saved to GitHub." : "Synced."; $("syncStatus").className = "status good";
+  } catch (e) { $("syncStatus").textContent = e.message; $("syncStatus").className = "status bad"; }
+}
+$("syncBtn").onclick = () => sync(false);
+start();
+</script>
+</body>
+</html>

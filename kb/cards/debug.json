@@ -1,0 +1,50 @@
+{
+  "deck": "debug",
+  "cards": [
+    {
+      "id": "d-verdict-1",
+      "lane": "debug",
+      "type": "recall",
+      "front": "Trigger vs root cause, in one line each.",
+      "back": "**Trigger:** the condition that made the failure appear. **Root cause:** the defect that, when fixed, removes the failure for every trigger.",
+      "note": "debug-playbooks/dut-vs-tb-verdict",
+      "author": "claude"
+    },
+    {
+      "id": "d-verdict-2",
+      "lane": "debug",
+      "type": "recall",
+      "front": "The fix went into the checker's binding. DUT bug or TB bug?",
+      "back": "**Testbench bug.** The verdict follows where the defect was, not where the error was reported.",
+      "note": "debug-playbooks/dut-vs-tb-verdict",
+      "author": "claude"
+    },
+    {
+      "id": "d-verdict-3",
+      "lane": "debug",
+      "type": "explain",
+      "front": "First 15 minutes on a scoreboard UVM_ERROR, in order.",
+      "back": "1. Read the error: which check, expected vs actual. 2. Reproduce with the same seed. 3. Take the **expected value from the spec**. 4. Look at the waveform at the failure time. 5. Form a hypothesis: DUT or TB.",
+      "note": "debug-playbooks/dut-vs-tb-verdict",
+      "author": "claude"
+    },
+    {
+      "id": "d-cmp-1",
+      "lane": "debug",
+      "type": "explain",
+      "front": "Unidentified macro in the build. Your method?",
+      "back": "Find the failing log → confirm it's **preprocess** → trace the config hierarchy to see which config should define the macro → add it in the right config → note it in your debug notes.",
+      "note": "debug-playbooks/compile-errors",
+      "author": "claude"
+    },
+    {
+      "id": "d-reg-1",
+      "lane": "debug",
+      "type": "recall",
+      "front": "Regression hasn't run for over a week. First three checks, in order?",
+      "back": "1. **Recent error logs** (usually a build-flow failure before the run starts). 2. **Schedule** (cron). 3. **Is it still needed?**",
+      "note": "debug-playbooks/regression-not-running",
+      "author": "claude"
+    }
+  ]
+}

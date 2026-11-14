@@ -1,0 +1,14 @@
+[
+  {
+    "date": "2026-10-06",
+    "open": 13,
+    "recurring": 2,
+    "closing": 2
+  },
+  {
+    "date": "2026-10-28",
+    "open": 18,
+    "recurring": 1,
+    "closing": 8
+  }
+]

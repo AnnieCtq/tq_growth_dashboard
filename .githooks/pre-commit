@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Blocks commits that contain work-confidential terms. Enable once per clone:
+#   git config core.hooksPath .githooks
+set -euo pipefail
+python3 "$(git rev-parse --show-toplevel)/scripts/scrub_check.py" --staged

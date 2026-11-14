@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Covergroup score calculator: union vs average</title>
+<meta name="description" content="Click bins hit per instance and watch instance, union and average scores, and what each one hides at sign-off.">
+<link rel="stylesheet" href="../../assets/style.css">
+<script>try{const t=JSON.parse(localStorage.getItem("tqg:theme"));if(t)document.documentElement.dataset.theme=t}catch{}</script>
+<style>
+  body{ background:var(--surface); } .wrap{ padding:20px; max-width:980px; }
+  table.g{ border-collapse:separate; border-spacing:6px; margin:10px 0; }
+  table.g th{ font-size:12.5px; color:var(--muted); font-weight:600; padding:0 6px; }
+  table.g td.cell button{ width:46px; height:40px; border-radius:10px; border:1px solid var(--faint); background:var(--raised); cursor:pointer; font-family:var(--mono); }
+  table.g td.cell button[aria-pressed="true"]{ background:var(--auto); border-color:var(--auto); color:#fff; }
+  table.g td.cell button.hole{ background:var(--rose-wash); border-color:var(--rose); }
+  table.g td.pct{ font-family:var(--mono); min-width:64px; text-align:right; }
+  .bars{ display:grid; gap:12px; margin-top:14px; }
+  .bar{ display:grid; grid-template-columns:230px 1fr 64px; gap:12px; align-items:center; font-size:14.5px; }
+  .bar .t{ height:16px; background:var(--hair); border-radius:8px; overflow:hidden; } .bar .t i{ display:block; height:100%; transition:width .25s; }
+  .bar .v{ font-family:var(--mono); text-align:right; }
+  .say{ background:var(--raised); border:1px solid var(--hair); border-radius:12px; padding:12px 14px; margin-top:14px; }
+  .predict{ border:1px dashed var(--amber); background:var(--amber-wash); border-radius:12px; padding:10px 14px; margin-top:10px; font-size:14.5px; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <h2>Covergroup scores: instance, union, average</h2>
+  <p class="sub">Each row is a covergroup <b>instance</b> (one per DMA engine, say), and each column is a bin. Click to mark a bin as hit.</p>
+  <div class="row" style="margin-top:10px">
+    <button class="btn" id="preset">Load the Week 1 example</button>
+    <button class="btn" id="addI">+ instance</button><button class="btn" id="rmI">− instance</button>
+    <button class="btn" id="addB">+ bin</button><button class="btn" id="rmB">− bin</button>
+    <button class="btn quiet" id="clear">Clear</button>
+  </div>
+  <div class="predict" id="predict">🤔 <b>Predict first:</b> with inst0 hitting A,B and inst1 hitting B,C (4 bins), what are the union and average scores?</div>
+  <table class="g" id="grid"></table>
+  <div class="bars" id="bars"></div>
+  <div class="say" id="say"></div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+let I = 2, B = 4, hit = new Set();
+const key = (i, b) => `${i}:${b}`;
+const L = (b) => String.fromCharCode(65 + b);
+function preset() { I = 2; B = 4; hit = new Set([key(0, 0), key(0, 1), key(1, 1), key(1, 2)]); draw(); }
+function draw() {
+  const g = $("grid"); g.innerHTML = "";
+  const head = document.createElement("tr"); head.innerHTML = `<th></th>${[...Array(B)].map((_, b) => `<th>${L(b)}</th>`).join("")}<th>instance</th>`; g.append(head);
+  const unionHit = [...Array(B)].map((_, b) => [...Array(I)].some((_, i) => hit.has(key(i, b))));
+  const inst = [];
+  for (let i = 0; i < I; i++) {
+    const tr = document.createElement("tr"); tr.innerHTML = `<th>inst${i}</th>`;
+    let n = 0;
+    for (let b = 0; b < B; b++) {
+      const td = document.createElement("td"); td.className = "cell";
+      const on = hit.has(key(i, b)); if (on) n++;
+      const bt = document.createElement("button"); bt.setAttribute("aria-pressed", String(on)); bt.textContent = on ? "hit" : "";
+      bt.setAttribute("aria-label", `inst${i} bin ${L(b)}`);
+      if (!on && unionHit[b]) bt.classList.add("hole");
+      bt.onclick = () => { on ? hit.delete(key(i, b)) : hit.add(key(i, b)); draw(); };
+      td.append(bt); tr.append(td);
+    }
+    const p = n / B * 100; inst.push(p);
+    const tdp = document.createElement("td"); tdp.className = "pct"; tdp.textContent = `${+p.toFixed(1)}%`; tr.append(tdp); g.append(tr);
+  }
+  const union = unionHit.filter(Boolean).length / B * 100;
+  const avg = inst.reduce((a, b) => a + b, 0) / I;
+  const minI = Math.min(...inst), lag = inst.indexOf(minI);
+  $("bars").innerHTML = [
+    ["Union (merge_instances = 1)", union, "var(--sv)"],
+    ["Average (per_instance, merge_instances = 0)", avg, "var(--cpp)"],
+    [`Weakest instance (inst${lag})`, minI, "var(--rose)"],
+  ].map(([n, v, c]) => `<div class="bar"><span>${n}</span><span class="t"><i style="width:${v}%;background:${c}"></i></span><span class="v">${+v.toFixed(1)}%</span></div>`).join("");
+  const holes = [...Array(I)].map((_, i) => [...Array(B)].filter((_, b) => unionHit[b] && !hit.has(key(i, b))).length).reduce((a, b) => a + b, 0);
+  let s = `Union counts a bin once if <i>any</i> instance hit it (${unionHit.filter(Boolean).length}/${B}). Average takes the mean of the instance scores (${inst.map(p => +p.toFixed(1) + "%").join(" + ")}) ÷ ${I}. `;
+  if (union === 100 && minI < 100) s += `<b>Union says 100% but inst${lag} is only at ${+minI.toFixed(1)}%.</b> That's what union mode hides at sign-off: per-instance holes (shown in red). `;
+  else if (holes) s += `Red cells are bins some other instance hit but this one didn't. Union mode would never show you these. `;
+  if (I > 1 && avg > minI) s += `Average mode shows ${+avg.toFixed(1)}%, but not <i>which</i> instance is behind. You need the per-instance report for that.`;
+  $("say").innerHTML = s;
+}
+$("preset").onclick = preset;
+$("addI").onclick = () => { if (I < 6) { I++; draw(); } };
+$("rmI").onclick = () => { if (I > 1) { I--; hit = new Set([...hit].filter(k => +k.split(":")[0] < I)); draw(); } };
+$("addB").onclick = () => { if (B < 8) { B++; draw(); } };
+$("rmB").onclick = () => { if (B > 1) { B--; hit = new Set([...hit].filter(k => +k.split(":")[1] < B)); draw(); } };
+$("clear").onclick = () => { hit = new Set(); draw(); };
+draw();
+</script>
+</body>
+</html>

@@ -1,0 +1,356 @@
+{
+  "deck": "concepts",
+  "cards": [
+    {
+      "id": "c-eval-1",
+      "lane": "sv",
+      "type": "predict",
+      "front": "```systemverilog\nlogic do_write = wr_en && !full;\n```\nWhat value does `do_write` have 100 cycles later, after `wr_en` toggles many times?",
+      "back": "Whatever `wr_en && !full` was **at time 0**. A variable initialiser runs once, so `do_write` never follows its inputs. Use `assign do_write = …;` or `always_comb`.",
+      "note": "concepts/sv-evaluation-timing",
+      "author": "claude"
+    },
+    {
+      "id": "c-eval-2",
+      "lane": "sv",
+      "type": "recall",
+      "front": "`parameter int DEPTH = 16;` What does `$bits(DEPTH)` return? What did you probably want?",
+      "back": "`32`, the width of an `int`, not of the value 16. For a counter that holds 0…DEPTH, use `$clog2(DEPTH+1)` (= 5).",
+      "note": "concepts/sv-evaluation-timing",
+      "author": "claude"
+    },
+    {
+      "id": "c-eval-3",
+      "lane": "sv",
+      "type": "explain",
+      "front": "Name the four moments an SV expression can be evaluated, with one construct for each.",
+      "back": "- **Elaboration:** parameters, `$bits`, `$clog2`, generate\n- **Time 0, once:** variable initialisers\n- **Whenever inputs change:** `assign`, `always_comb`\n- **At a clock edge:** `always_ff @(posedge clk)`",
+      "note": "concepts/sv-evaluation-timing",
+      "author": "claude"
+    },
+    {
+      "id": "c-bnb-1",
+      "lane": "sv",
+      "type": "predict",
+      "front": "```systemverilog\nalways_ff @(posedge clk) begin\n  q1 = d;\n  q2 = q1;\nend\n```\nIs this a 2-stage shift register?",
+      "back": "No. `q1` updates immediately, so `q2` gets the **new** `d` in the same edge: one stage. Use `<=` so `q2` reads the old `q1`.",
+      "note": "concepts/blocking-vs-nonblocking",
+      "author": "claude"
+    },
+    {
+      "id": "c-bnb-2",
+      "lane": "sv",
+      "type": "recall",
+      "front": "In which simulation region are non-blocking (`<=`) updates applied?",
+      "back": "The **NBA** region, after the Active region has finished evaluating every right-hand side for that time step.",
+      "note": "concepts/blocking-vs-nonblocking",
+      "author": "claude"
+    },
+    {
+      "id": "c-bnb-3",
+      "lane": "sv",
+      "type": "recall",
+      "front": "Why don't you use `<=` on class fields in a UVM component?",
+      "back": "Class code is procedural testbench code, not hardware. `<=` on class properties is illegal or misleading. Use `=` and use clocking blocks for timing.",
+      "note": "concepts/blocking-vs-nonblocking",
+      "author": "claude"
+    },
+    {
+      "id": "c-cb-1",
+      "lane": "sv",
+      "type": "recall",
+      "front": "Clocking-block direction: decided by the DUT's ports, or by the component using the clocking block?",
+      "back": "By the **component using it**. A monitor only samples, so everything in its clocking block is `input`, even signals that are DUT inputs.",
+      "note": "concepts/clocking-block-direction",
+      "author": "claude"
+    },
+    {
+      "id": "c-cb-2",
+      "lane": "sv",
+      "type": "recall",
+      "front": "`default input #1step output #2;` When is an input sampled? When is an output driven?",
+      "back": "Inputs are sampled at the value just **before** the edge (Preponed region, `#1step`). Outputs are driven **2 time units after** the edge.",
+      "note": "concepts/clocking-block-direction",
+      "author": "claude"
+    },
+    {
+      "id": "c-cb-3",
+      "lane": "sv",
+      "type": "predict",
+      "front": "```systemverilog\nclocking mon_cb @(posedge clk);\n  output wr_en, din;\n  input  full, dout;\nendclocking\n```\nThis is the monitor's clocking block. What's wrong?",
+      "back": "A monitor must not drive. `wr_en` and `din` should be `input`. As written, the monitor could fight the driver on those signals.",
+      "note": "concepts/clocking-block-direction",
+      "author": "claude"
+    },
+    {
+      "id": "c-fifo-1",
+      "lane": "sv",
+      "type": "recall",
+      "front": "FIFO scoreboard: what should the pop-and-compare be gated on?",
+      "back": "`rd_valid` **alone**. Gating it on `rd_en && rd_valid` misses beats when there's read latency, and makes the scoreboard blind to a DUT that raises `rd_valid` wrongly.",
+      "note": "concepts/fifo-scoreboard-rd-valid",
+      "author": "claude"
+    },
+    {
+      "id": "c-fifo-2",
+      "lane": "sv",
+      "type": "predict",
+      "front": "Read latency is 1 cycle. For a single read, `rd_en` is high in cycle 5. When is `rd_en && rd_valid` true?",
+      "back": "**Never**: `rd_en` is high in cycle 5 but `rd_valid` is high in cycle 6. The read is lost (and in a burst, the last beat drops).",
+      "note": "concepts/fifo-scoreboard-rd-valid",
+      "author": "claude"
+    },
+    {
+      "id": "c-obj-1",
+      "lane": "sv",
+      "type": "recall",
+      "front": "A test never raises an objection. What happens?",
+      "back": "The run phase ends at **time 0**. Nothing runs, and the test can falsely pass.",
+      "note": "concepts/uvm-phasing-and-objections",
+      "author": "claude"
+    },
+    {
+      "id": "c-obj-2",
+      "lane": "sv",
+      "type": "recall",
+      "front": "A test raises an objection but never drops it. What happens?",
+      "back": "The run phase never ends. The sim **hangs until the global timeout** and fails.",
+      "note": "concepts/uvm-phasing-and-objections",
+      "author": "claude"
+    },
+    {
+      "id": "c-obj-3",
+      "lane": "sv",
+      "type": "recall",
+      "front": "Order of build vs connect phase, and why.",
+      "back": "build runs **top-down** (parents create children). connect runs **bottom-up** (children exist before their ports are connected).",
+      "note": "concepts/uvm-phasing-and-objections",
+      "author": "claude"
+    },
+    {
+      "id": "c-bind-1",
+      "lane": "sv",
+      "type": "explain",
+      "front": "Why does each bound copy of an interface see its own instance's clock?",
+      "back": "`bind` puts an instance **inside the target module's scope**, so the port names resolve to that instance's signals. Each copy gets that copy's clock.",
+      "note": "concepts/config-db-and-bind",
+      "author": "claude"
+    },
+    {
+      "id": "c-bind-2",
+      "lane": "sv",
+      "type": "recall",
+      "front": "Bound interface + UVM checker: who calls `config_db::set` and who calls `get`?",
+      "back": "The bound interface (or a module next to it) **sets** its virtual interface at a path. The component **gets** it in build_phase. If the paths don't match, `get` fails.",
+      "note": "concepts/config-db-and-bind",
+      "author": "claude"
+    },
+    {
+      "id": "c-bind-3",
+      "lane": "debug",
+      "type": "explain",
+      "front": "Multi-instance checker failure: separate the trigger from the root cause.",
+      "back": "**Trigger:** what made it show up (a feature or config enabled multiple instances or the checker). **Root cause:** the checker's hierarchy binding only covered one instance. The fix belongs where the root cause is.",
+      "note": "concepts/config-db-and-bind",
+      "author": "claude"
+    },
+    {
+      "id": "c-hdl-1",
+      "lane": "sv",
+      "type": "recall",
+      "front": "Why does a typo in a `uvm_hdl_read` path still compile?",
+      "back": "The path is a **string**, resolved only at runtime.",
+      "note": "concepts/uvm-hdl-read",
+      "author": "claude"
+    },
+    {
+      "id": "c-hdl-2",
+      "lane": "sv",
+      "type": "recall",
+      "front": "`uvm_hdl_read` with a wrong path: what happens, and what should the caller do?",
+      "back": "It **returns 0** and leaves the value unchanged (stale), so the checker compares garbage and reports a misleading mismatch. Check the return value and `uvm_error` if it's 0.",
+      "note": "concepts/uvm-hdl-read",
+      "author": "claude"
+    },
+    {
+      "id": "c-ral-1",
+      "lane": "sv",
+      "type": "explain",
+      "front": "Name each hop of a RAL frontdoor `reg.write()`.",
+      "back": "uvm_reg → uvm_reg_map → adapter `reg2bus` → bus sequencer/driver → DUT → response → `bus2reg` → status. The monitor → predictor then updates the mirror (explicit prediction).",
+      "note": "concepts/ral-frontdoor-path",
+      "author": "claude"
+    },
+    {
+      "id": "c-ral-2",
+      "lane": "sv",
+      "type": "recall",
+      "front": "What do `reg2bus` and `bus2reg` convert between?",
+      "back": "`uvm_reg_bus_op` (kind, addr, data, n_bits, status) ↔ the bus UVC's **sequence item**.",
+      "note": "concepts/ral-frontdoor-path",
+      "author": "claude"
+    },
+    {
+      "id": "c-ral-3",
+      "lane": "sv",
+      "type": "recall",
+      "front": "Explicit vs auto prediction: who updates the mirror?",
+      "back": "**Auto:** the map updates the mirror after each access the model itself started. **Explicit:** a `uvm_reg_predictor` on the bus monitor updates it from observed traffic, including traffic the model didn't start.",
+      "note": "concepts/ral-frontdoor-path",
+      "author": "claude"
+    },
+    {
+      "id": "c-fb-1",
+      "lane": "sv",
+      "type": "recall",
+      "front": "Three things frontdoor access exercises that backdoor skips.",
+      "back": "The bus interface/protocol, **address decode**, and **access policy** (RO/W1C/side effects). Also bus timing and errors.",
+      "note": "concepts/frontdoor-vs-backdoor",
+      "author": "claude"
+    },
+    {
+      "id": "c-fb-2",
+      "lane": "sv",
+      "type": "recall",
+      "front": "Two good reasons to use backdoor anyway.",
+      "back": "**Speed** (no bus cycles: preload or check many registers or memories) and **visibility** (internal signals and state with no bus path).",
+      "note": "concepts/frontdoor-vs-backdoor",
+      "author": "claude"
+    },
+    {
+      "id": "c-cov-1",
+      "lane": "sv",
+      "type": "calc",
+      "front": "4 bins A–D, 2 instances. inst0 hits A,B; inst1 hits B,C. Union group score? Average group score?",
+      "back": "Union: A,B,C hit → **75%**. Average: (50% + 50%) / 2 → **50%**.",
+      "note": "concepts/coverage-group-vs-instance",
+      "author": "claude"
+    },
+    {
+      "id": "c-cov-2",
+      "lane": "sv",
+      "type": "recall",
+      "front": "At sign-off, what can a 100% **union**-mode group score hide?",
+      "back": "That an **individual instance has holes**: each bin was hit by *some* instance, but not every instance was exercised fully.",
+      "note": "concepts/coverage-group-vs-instance",
+      "author": "claude"
+    },
+    {
+      "id": "c-cov-3",
+      "lane": "sv",
+      "type": "recall",
+      "front": "What does **average** mode hide instead?",
+      "back": "**Which instance lags.** A good and a poor instance can average to a reasonable-looking number.",
+      "note": "concepts/coverage-group-vs-instance",
+      "author": "claude"
+    },
+    {
+      "id": "c-fcov-1",
+      "lane": "sv",
+      "type": "recall",
+      "front": "Which kind of coverage shows the verification plan is complete?",
+      "back": "**Functional coverage**: covergroups and cover properties derived from the plan, which comes from the functional spec.",
+      "note": "concepts/code-vs-functional-coverage",
+      "author": "claude"
+    },
+    {
+      "id": "c-fcov-2",
+      "lane": "sv",
+      "type": "explain",
+      "front": "100% coverage, scoreboard disabled. What do you know about the DUT?",
+      "back": "Nothing about correctness. Coverage **records** what was exercised. Only checkers and scoreboards decide whether the result was right.",
+      "note": "concepts/code-vs-functional-coverage",
+      "author": "claude"
+    },
+    {
+      "id": "c-fcov-3",
+      "lane": "sv",
+      "type": "recall",
+      "front": "Who chooses covergroups, and from which document?",
+      "back": "The DV engineer, from the **verification plan**, which is derived from the functional or architecture spec (not the MAS alone).",
+      "note": "concepts/code-vs-functional-coverage",
+      "author": "claude"
+    },
+    {
+      "id": "c-dpi-1",
+      "lane": "dpi",
+      "type": "recall",
+      "front": "DPI-C C-side types for SV `int`, `byte`, `real`, `string`, `chandle`, open array.",
+      "back": "`int`→`int`, `byte`→`char`, `real`→`double`, `string`→`const char*`, `chandle`→`void*`, open array→`svOpenArrayHandle`.",
+      "note": "concepts/dpi-c-boundary",
+      "author": "claude"
+    },
+    {
+      "id": "c-dpi-2",
+      "lane": "dpi",
+      "type": "recall",
+      "front": "When must an import be `context` rather than plain?",
+      "back": "When the C code **calls exported SV tasks or functions** or uses scope APIs (`svGetScope`/`svSetScope`). `pure` is only for side-effect-free functions.",
+      "note": "concepts/dpi-c-boundary",
+      "author": "claude"
+    },
+    {
+      "id": "c-dpi-3",
+      "lane": "dpi",
+      "type": "explain",
+      "front": "Memory ownership across DPI-C: SV passes an array into C. Can C keep the pointer?",
+      "back": "No. SV-owned argument memory is only valid **for the duration of the call**. If C allocates something to keep, return it as a `chandle` and provide an import that frees it.",
+      "note": "concepts/dpi-c-boundary",
+      "author": "claude"
+    },
+    {
+      "id": "c-seed-1",
+      "lane": "sv",
+      "type": "recall",
+      "front": "Same seed on VCS and Xcelium: same stimulus?",
+      "back": "**No.** The RNG implementations and thread or process ordering differ, so randomisation results differ.",
+      "note": "concepts/seeds-across-simulators",
+      "author": "claude"
+    },
+    {
+      "id": "c-seed-2",
+      "lane": "sv",
+      "type": "recall",
+      "front": "How should a simulator migration be compared, then?",
+      "back": "Over **seed sweeps**: pass rate, coverage reached, bug classes found, runtime. Not seed for seed.",
+      "note": "concepts/seeds-across-simulators",
+      "author": "claude"
+    },
+    {
+      "id": "c-cmp-1",
+      "lane": "sv",
+      "type": "recall",
+      "front": "Which stage: (a) unidentified macro (b) identifier not declared (c) missing input port?",
+      "back": "(a) **preprocess**, (b) **parse/compile**, (c) **elaboration**.",
+      "note": "concepts/compile-stages",
+      "author": "claude"
+    },
+    {
+      "id": "c-cmp-2",
+      "lane": "sv",
+      "type": "explain",
+      "front": "Method: how do you find which filelist should pull in a missing file?",
+      "back": "Find who `include`s or uses the file → find which filelist builds that unit → check `+incdir`/`-f` chains and order → confirm with a grep of the compile log for the paths that were actually used.",
+      "note": "concepts/compile-stages",
+      "author": "claude"
+    },
+    {
+      "id": "c-reg-1",
+      "lane": "tools",
+      "type": "recall",
+      "front": "Smoke vs stress regression?",
+      "back": "**Smoke:** few, short tests that check the build and basic function quickly. **Stress:** many seeds, long runs and heavy randomisation to find corner cases.",
+      "note": "concepts/stress-vs-smoke",
+      "author": "claude"
+    },
+    {
+      "id": "c-reg-2",
+      "lane": "tools",
+      "type": "recall",
+      "front": "Why bring up the **smallest** test first?",
+      "back": "It isolates **setup or infrastructure** problems from test complexity. If the smallest test fails, the cause is the environment, not the scenario.",
+      "note": "concepts/stress-vs-smoke",
+      "author": "claude"
+    }
+  ]
+}

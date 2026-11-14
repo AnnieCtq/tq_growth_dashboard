@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SV scheduling regions, step by step</title>
+<meta name="description" content="Step through one time slot: blocking vs non-blocking swaps, and why a variable initialiser freezes.">
+<link rel="stylesheet" href="../../assets/style.css">
+<script>try{const t=JSON.parse(localStorage.getItem("tqg:theme"));if(t)document.documentElement.dataset.theme=t}catch{}</script>
+<style>
+  body{ background:var(--surface); } .wrap{ padding:20px; max-width:980px; }
+  .regions{ display:flex; gap:4px; margin:14px 0; flex-wrap:wrap; }
+  .regions div{ flex:1; min-width:92px; text-align:center; padding:10px 4px; border-radius:10px; background:var(--raised); border:1px solid var(--hair); font-size:13px; color:var(--muted); transition:all .2s; }
+  .regions div.on{ background:var(--sv-wash); border-color:var(--sv); color:var(--ink); font-weight:600; transform:translateY(-2px); }
+  .regions div small{ display:block; font-size:11px; font-weight:400; }
+  .cols{ display:grid; grid-template-columns:1.2fr 1fr; gap:16px; } @media (max-width:760px){ .cols{ grid-template-columns:1fr; } }
+  pre.code{ background:var(--raised); border:1px solid var(--hair); border-radius:12px; padding:12px 14px; font-size:14px; line-height:1.7; margin:0; }
+  pre.code span.hl{ background:var(--amber-wash); outline:1px solid var(--amber); border-radius:4px; }
+  table.vars{ width:100%; border-collapse:collapse; font-family:var(--mono); } table.vars td,table.vars th{ border-bottom:1px solid var(--hair); padding:7px 8px; text-align:left; }
+  table.vars td.ch{ background:var(--auto-wash); } table.vars td.pend{ color:var(--amber); }
+  .say{ min-height:72px; background:var(--raised); border:1px solid var(--hair); border-radius:12px; padding:12px 14px; margin-top:14px; }
+  .predict{ border:1px dashed var(--amber); background:var(--amber-wash); border-radius:12px; padding:10px 14px; margin-top:12px; font-size:14.5px; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <h2>SystemVerilog scheduling, one time slot at a time</h2>
+  <p class="sub">Pick an example, predict the final values, then step through it. <kbd>→</kbd> next, <kbd>←</kbd> back.</p>
+  <div class="row" id="ex" style="margin-top:12px"></div>
+  <div class="regions" id="regions"></div>
+  <div class="cols">
+    <div><pre class="code" id="code"></pre><div class="predict" id="predict"></div></div>
+    <div><table class="vars" id="vars"></table><div class="say" id="say"></div>
+      <div class="row" style="margin-top:12px"><button class="btn" id="prev">← Back</button><button class="btn primary" id="next">Next →</button><button class="btn quiet" id="reset">Restart</button><span class="sub" id="pos"></span></div></div>
+  </div>
+</main>
+<script>
+const REG = [["Preponed","sample #1step"],["Active","= , assign, $display"],["Inactive","#0"],["NBA","<= updates land"],["Observed","assertions"],["Reactive","program blocks"],["Postponed","$strobe, $monitor"]];
+const EX = {
+  blocking: { name: "Blocking swap (=)", code: ["always_ff @(posedge clk) begin", "  a = b;", "  b = a;", "end"], vars: ["a", "b"], init: { a: 0, b: 1 },
+    predict: "Start: a = 0, b = 1. After the clock edge, do a and b swap?",
+    steps: [
+      { r: 0, line: 0, s: "Preponed: values are sampled before anything in this slot runs (a = 0, b = 1)." },
+      { r: 1, line: 1, set: { a: 1 }, s: "Active: `a = b` runs and updates a <b>immediately</b>. a is now 1." },
+      { r: 1, line: 2, set: { b: 1 }, s: "Active: `b = a` reads the <b>new</b> a (1). b stays 1. The old value of a is gone." },
+      { r: 6, line: -1, s: "End of slot: a = 1, b = 1. <b>No swap.</b> Blocking assignments in a clocked block act like sequential software. That's why flops use <=." } ] },
+  nonblocking: { name: "Non-blocking swap (<=)", code: ["always_ff @(posedge clk) begin", "  a <= b;", "  b <= a;", "end"], vars: ["a", "b"], init: { a: 0, b: 1 },
+    predict: "Same start: a = 0, b = 1. Does this version swap?",
+    steps: [
+      { r: 0, line: 0, s: "Preponed: sample a = 0, b = 1." },
+      { r: 1, line: 1, pend: { a: 1 }, s: "Active: `a <= b` <b>reads</b> b (1) now, but <b>schedules</b> the write for NBA. a is still 0." },
+      { r: 1, line: 2, pend: { b: 0 }, s: "Active: `b <= a` reads a, which is still the OLD value 0. Write scheduled." },
+      { r: 3, line: -1, set: { a: 1, b: 0 }, s: "NBA: both scheduled updates land together. a = 1, b = 0." },
+      { r: 6, line: -1, s: "<b>Swapped.</b> Every right-hand side was read before any left-hand side changed, just like real flops on one clock edge." } ] },
+  init: { name: "Initialiser vs assign", code: ["logic do_w_init = wr_en && !full;   // initialiser", "assign do_w_cont = wr_en && !full;  // continuous", "", "// wr_en: 0 → 1 at 10ns, full stays 0"], vars: ["wr_en", "do_w_init", "do_w_cont"], init: { wr_en: 0, do_w_init: "–", do_w_cont: "–" },
+    predict: "At 10 ns wr_en goes to 1. What are do_w_init and do_w_cont afterwards?",
+    steps: [
+      { r: 1, line: 0, t: "0 ns", set: { do_w_init: 0 }, s: "Time 0: the initialiser runs <b>once</b> and computes 0 && 1 = 0. It never runs again." },
+      { r: 1, line: 1, t: "0 ns", set: { do_w_cont: 0 }, s: "Time 0: the continuous assign also computes 0, but it is now <b>watching</b> wr_en and full." },
+      { r: 1, line: 3, t: "10 ns", set: { wr_en: 1 }, s: "10 ns: the testbench drives wr_en = 1 in the Active region." },
+      { r: 1, line: 1, t: "10 ns", set: { do_w_cont: 1 }, s: "The assign wakes up because wr_en changed, and re-evaluates to 1." },
+      { r: 6, line: 0, t: "10 ns", s: "do_w_init is <b>still 0</b>, frozen at elaboration and time 0. That's the FIFO bug: `logic x = expr;` is not a wire." } ] },
+};
+let cur = "blocking", i = -1;
+const $ = (id) => document.getElementById(id);
+for (const [k, e] of Object.entries(EX)) { const b = document.createElement("button"); b.className = "chip"; b.textContent = e.name; b.onclick = () => { cur = k; i = -1; draw(); }; b.dataset.k = k; $("ex").append(b); }
+REG.forEach(([n, s]) => { const d = document.createElement("div"); d.innerHTML = `${n}<small>${s}</small>`; $("regions").append(d); });
+function state() {
+  const e = EX[cur], v = { ...e.init }, pend = {}, changed = new Set();
+  for (let j = 0; j <= i; j++) { const st = e.steps[j];
+    if (st.pend) Object.assign(pend, st.pend);
+    if (st.set) { for (const k in st.set) { v[k] = st.set[k]; delete pend[k]; if (j === i) changed.add(k); } } }
+  return { v, pend, changed };
+}
+function draw() {
+  const e = EX[cur], st = e.steps[i];
+  [...$("ex").children].forEach(b => b.setAttribute("aria-pressed", String(b.dataset.k === cur)));
+  [...$("regions").children].forEach((d, k) => d.classList.toggle("on", !!st && st.r === k));
+  $("code").innerHTML = e.code.map((l, k) => st && st.line === k ? `<span class="hl">${esc(l)}</span>` : esc(l)).join("\n");
+  const { v, pend, changed } = state();
+  $("vars").innerHTML = `<tr><th>signal</th><th>value</th><th>scheduled</th></tr>` + e.vars.map(k => `<tr><td>${k}</td><td class="${changed.has(k) ? "ch" : ""}">${v[k]}</td><td class="pend">${k in pend ? "← " + pend[k] + " (NBA)" : ""}</td></tr>`).join("");
+  $("say").innerHTML = st ? (st.t ? `<b>${st.t}</b> · ` : "") + st.s : "Press <b>Next</b> to start. Make your prediction first.";
+  $("predict").innerHTML = "🤔 <b>Predict:</b> " + e.predict;
+  $("pos").textContent = `${i + 1} / ${e.steps.length}`;
+  $("prev").disabled = i < 0; $("next").disabled = i >= e.steps.length - 1;
+}
+const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+$("next").onclick = () => { if (i < EX[cur].steps.length - 1) { i++; draw(); } };
+$("prev").onclick = () => { if (i >= 0) { i--; draw(); } };
+$("reset").onclick = () => { i = -1; draw(); };
+addEventListener("keydown", (e) => { if (e.key === "ArrowRight") $("next").click(); if (e.key === "ArrowLeft") $("prev").click(); });
+draw();
+</script>
+</body>
+</html>
