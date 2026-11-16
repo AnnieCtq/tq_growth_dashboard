@@ -166,7 +166,7 @@ export function toast(msg, ms = 2600) {
 function applyTheme(t) { if (t) document.documentElement.setAttribute("data-theme", t); else document.documentElement.removeAttribute("data-theme"); }
 applyTheme(store.get("theme", null));
 
-const PAGES = [["index.html", "Growth"], ["daily.html", "Daily log"], ["kb.html", "Knowledge"], ["practice.html", "Practice"]];
+const PAGES = [["index.html", "Growth"], ["daily.html", "Daily log"], ["tasks.html", "Tasks"], ["kb.html", "Knowledge"], ["practice.html", "Practice"]];
 export function chrome(current) {
   const due = store.get("dueToday", null);
   const nav = el("nav", { class: "top", "aria-label": "Main" }, el("div", { class: "in" },

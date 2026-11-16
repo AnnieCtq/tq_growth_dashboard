@@ -8,8 +8,9 @@ The skills in this folder are copies of the six coach and reviewer skills in my 
 3. `records/gap_analysis.md`: the current weaknesses.
 4. `records/project_historian.md`: the append-only session log.
 5. `records/contract.md`: the DPI-C and build/link seam agreements.
-6. `data/daily/*.json` (last 14 days), `data/evaluations.json`, `data/self_rating.json`
-7. `kb/`: notes, with their `status` and the `## In my own words` section.
+6. `data/tasks.json`: the plans you set and where each task stands
+7. `data/daily/*.json` (last 14 days), `data/evaluations.json`, `data/self_rating.json`
+8. `kb/`: notes, with their `status` and the `## In my own words` section.
 
 ## Write at the end of a session (one commit per session)
 | File | Rule |
@@ -19,6 +20,7 @@ The skills in this folder are copies of the six coach and reviewer skills in my 
 | `records/session_context.md` | **Overwrite** with the latest compressed context |
 | `records/contract.md` | **Overwrite** when a seam agreement changes, and add a Change log line |
 | `data/gap_snapshots.json` | Append `{date, open, recurring, closing}` |
+| `data/tasks.json` | When a session sets a plan, add its tasks (one list per plan, same shape as existing tasks). When a done-when check passes, set `status` to `done` and write a dated line in `log`. You may set `doing` when work starts. **Never edit `note`**: that field is mine |
 | `data/evaluations.json` | Append a panel evaluation when asked to “evaluate me”. Use the same shape as the existing entries |
 | `kb/**.md` | See below |
 | `kb/cards/*.json` | Add practice cards for new notes (`author: "claude"`) |

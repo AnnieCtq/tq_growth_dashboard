@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tasks · Verification growth</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌱</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..900,0..1,0..1,0..1&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .tsum{ display:flex; gap:26px; flex-wrap:wrap; color:var(--muted); font-size:14.5px; }
+  .tsum b{ color:var(--ink); font-size:24px; font-weight:560; margin-right:6px; font-variation-settings:"CASL" 1; font-variant-numeric:tabular-nums; }
+  .savebar{ display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin:0 0 18px; padding:10px 16px; border-radius:14px; background:var(--amber-wash); }
+  .tprog{ display:flex; align-items:center; gap:10px; font-size:13.5px; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .tprog .bar{ width:120px; height:6px; border-radius:3px; background:var(--hair); overflow:hidden; display:block; }
+  .tprog .bar i{ display:block; height:100%; background:var(--auto); border-radius:3px; }
+  .tlist{ list-style:none; margin:0; padding:0; }
+  .trow{ display:grid; grid-template-columns:88px 1fr auto; gap:16px; padding:12px 0; border-top:1px solid var(--hair); align-items:start; }
+  .tstat{ border:1px solid var(--faint); background:transparent; border-radius:999px; padding:4px 0; width:84px; font-size:13px; font-weight:560; cursor:pointer; color:var(--muted); }
+  .tstat:hover{ border-color:var(--muted); }
+  .trow[data-status="doing"] .tstat{ border-color:var(--sv); color:var(--sv); background:var(--sv-wash); }
+  .trow[data-status="done"] .tstat{ border-color:transparent; color:var(--auto); background:var(--auto-wash); }
+  .tt{ font-size:15px; font-weight:540; line-height:1.45; }
+  .trow[data-status="done"] .tt{ color:var(--muted); font-weight:500; }
+  .tmeta{ display:block; font-size:12.5px; color:var(--muted); margin-top:2px; }
+  .tdw{ display:block; font-size:13.5px; color:var(--muted); margin-top:4px; line-height:1.45; }
+  .tdw strong{ color:var(--ink); font-weight:560; }
+  .tlog{ display:block; font-size:13.5px; margin-top:6px; line-height:1.45; padding-left:10px; border-left:2px solid var(--auto); }
+  .trow details{ margin-top:6px; }
+  .trow summary{ cursor:pointer; font-size:13px; color:var(--muted); width:max-content; }
+  .trow summary:hover{ color:var(--ink); }
+  .trow details p{ margin:8px 0 0; font-size:14.5px; line-height:1.6; max-width:72ch; }
+  .trow textarea{ margin-top:6px; min-height:58px; font-size:14px; }
+  .tnote-k{ display:block; font-size:12.5px; color:var(--muted); margin-top:10px; }
+  .tadd{ display:flex; gap:8px; margin-top:12px; }
+  .tadd input{ flex:1; min-width:0; border-radius:999px; padding:7px 14px; }
+  @media (max-width:560px){ .trow{ grid-template-columns:1fr auto; gap:8px 12px; } .trow .tb{ grid-column:1 / -1; } }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header class="page">
+    <div><h1>Tasks</h1>
+      <p class="lede">Every plan your coaches set, and where each one stands. Tap a status to move it on, then save. Everything lives in <span class="mono">data/tasks.json</span>, and your agents read it too.</p></div>
+    <div class="tsum" id="tSummary" aria-live="polite"></div>
+  </header>
+  <div class="savebar" id="saveBar" hidden>
+    <span id="saveMsg"></span>
+    <span class="row"><button class="btn quiet" id="discard">Discard</button><button class="btn primary" id="save">Save to GitHub</button></span>
+  </div>
+  <div id="projects"><p class="none">Loading tasks…</p></div>
+</main>
+
+<script type="module">
+import { $, el, chrome, fetchJSON, canWrite, ghRead, ghWrite, download, store, toast, today } from "./assets/app.js";
+chrome("tasks.html");
+
+const LABEL = { todo: "To do", doing: "Doing", done: "Done" };
+const NEXT = { todo: "doing", doing: "done", done: "todo" };
+const PATH = "data/tasks.json";
+
+// Repo copy, with edits made in this browser laid on top until they're saved.
+const doc = await fetchJSON(PATH, { tasks: [] });
+let edits = store.get("tasksPending", { changed: {}, removed: [] });
+const repoById = Object.fromEntries((doc.tasks || []).map(t => [t.id, t]));
+// Drop pending edits the repo already has (saved from another device, or the site rebuilt).
+for (const [id, t] of Object.entries(edits.changed)) { const r = repoById[id]; if (r && JSON.stringify(strip(r)) === JSON.stringify(strip(t))) delete edits.changed[id]; }
+edits.removed = edits.removed.filter(id => repoById[id]);
+persist();
+let tasks = merge(doc.tasks || []);
+
+function strip(t) { const { updated, ...rest } = t; return rest; }
+function merge(list) {
+  const by = Object.fromEntries(list.map(t => [t.id, t]));
+  for (const [id, t] of Object.entries(edits.changed)) by[id] = t;
+  for (const id of edits.removed) delete by[id];
+  return Object.values(by).sort((a, b) => (a.projectOrder - b.projectOrder) || (a.order - b.order));
+}
+function persist() { store.set("tasksPending", edits); paintSaveBar(); }
+function change(t) { t.updated = today(); edits.changed[t.id] = { ...t }; persist(); }
+function pendingCount() { return Object.keys(edits.changed).length + edits.removed.length; }
+
+function paintSaveBar() {
+  const n = pendingCount();
+  $("saveBar").hidden = !n;
+  $("saveMsg").textContent = `${n} unsaved ${n === 1 ? "change" : "changes"}, kept in this browser.`;
+  $("save").textContent = canWrite() ? "Save to GitHub" : "Download tasks.json";
+}
+$("discard").onclick = () => { if (!confirm("Discard the unsaved task changes in this browser?")) return; edits = { changed: {}, removed: [] }; persist(); tasks = merge(doc.tasks || []); render(); };
+$("save").onclick = async () => {
+  const btn = $("save"); btn.disabled = true;
+  try {
+    // Merge onto the freshest copy in the repo so a commit made elsewhere isn't overwritten.
+    let base = doc;
+    if (canWrite()) { const fresh = await ghRead(PATH); if (fresh) base = JSON.parse(fresh.text); }
+    const out = { ...base, updated: today(), tasks: merge(base.tasks || []) };
+    const text = JSON.stringify(out, null, 1) + "\n";
+    if (!canWrite()) { download("tasks.json", text); toast("Downloaded. Put it at data/tasks.json, or Connect to save straight to GitHub."); return; }
+    await ghWrite(PATH, text, `tasks: ${pendingCount()} update${pendingCount() === 1 ? "" : "s"}`);
+    edits = { changed: {}, removed: [] }; persist();
+    toast("Saved to GitHub. The site picks it up in about a minute.");
+  } catch (e) { toast(`Kept in this browser. GitHub said: ${e.message}`, 5000); }
+  finally { btn.disabled = false; }
+};
+
+function summary() {
+  const n = (s) => tasks.filter(t => t.status === s).length;
+  $("tSummary").replaceChildren(...[["doing", "in progress"], ["todo", "to do"], ["done", "done"]].map(([s, w]) => el("span", {}, el("b", {}, n(s)), w)));
+}
+function progress(sec, project) {
+  const items = tasks.filter(t => t.project === project), done = items.filter(t => t.status === "done").length;
+  sec.querySelector(".tprog .n").textContent = `${done} of ${items.length} done`;
+  sec.querySelector(".tprog i").style.width = `${items.length ? done / items.length * 100 : 0}%`;
+}
+function row(t, sec) {
+  const li = el("li", { class: "trow", "data-status": t.status });
+  const lab = () => `Status: ${LABEL[t.status]}. Change to ${LABEL[NEXT[t.status]]}`;
+  const stat = el("button", { class: "tstat", "aria-label": lab(), onclick: () => {
+    t.status = NEXT[t.status]; li.dataset.status = t.status; stat.textContent = LABEL[t.status]; stat.setAttribute("aria-label", lab());
+    change(t); summary(); progress(sec, t.project);
+  } }, LABEL[t.status]);
+  const det = el("details", {}, el("summary", {}, t.detail ? "Details and notes" : "Notes"), t.detail ? el("p", {}, t.detail) : null);
+  const ta = el("textarea", { "aria-label": `Your notes on ${t.title}`, placeholder: "Your notes, findings or where you got stuck" });
+  ta.value = t.note || "";
+  ta.onchange = () => { t.note = ta.value.trim(); change(t); };
+  det.append(el("span", { class: "tnote-k" }, "Your notes"), ta);
+  const del = t.custom ? el("button", { class: "btn quiet", onclick: () => {
+    if (!confirm(`Delete the task "${t.title}"?`)) return;
+    delete edits.changed[t.id]; if (repoById[t.id]) edits.removed.push(t.id);
+    persist(); tasks = tasks.filter(x => x.id !== t.id); render();
+  } }, "Delete") : el("span");
+  li.append(stat, el("div", { class: "tb" },
+    el("div", { class: "tt" }, t.title),
+    t.when || t.owner ? el("span", { class: "tmeta" }, [t.when, t.owner].filter(Boolean).join(", ")) : null,
+    t.doneWhen ? el("span", { class: "tdw" }, el("strong", {}, "Done when "), t.doneWhen) : null,
+    t.log ? el("span", { class: "tlog" }, t.log) : null, det), del);
+  return li;
+}
+function render() {
+  summary();
+  const box = $("projects"); box.replaceChildren();
+  if (!tasks.length) { box.append(el("p", { class: "none" }, "No tasks yet. Plans your coaches set will appear here.")); return; }
+  const groups = new Map();
+  tasks.forEach(t => { if (!groups.has(t.project)) groups.set(t.project, { goal: t.projectGoal, order: t.projectOrder, items: [] }); groups.get(t.project).items.push(t); });
+  for (const [name, g] of groups) {
+    const ul = el("ul", { class: "tlist" });
+    const sec = el("section", { class: "card", "aria-label": name },
+      el("header", {}, el("div", {}, el("h2", {}, name), g.goal ? el("p", { class: "sub" }, g.goal) : null),
+        el("span", { class: "tprog" }, el("span", { class: "bar", "aria-hidden": "true" }, el("i")), el("span", { class: "n" }))), ul);
+    g.items.forEach(t => ul.append(row(t, sec)));
+    const inp = el("input", { type: "text", maxlength: "200", placeholder: "Add a task to this list", "aria-label": `Add a task to ${name}` });
+    const add = () => {
+      const title = inp.value.trim(); if (!title) return;
+      const t = { id: "t-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), project: name, projectGoal: g.goal, projectOrder: g.order,
+        order: Math.max(0, ...g.items.map(x => x.order || 0)) + 1, title, status: "todo", detail: "", doneWhen: "", log: "", owner: "", when: "", note: "", custom: true };
+      tasks.push(t); change(t); render();
+    };
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); add(); } });
+    sec.append(el("div", { class: "tadd" }, inp, el("button", { class: "btn", onclick: add }, "Add")));
+    box.append(sec); progress(sec, name);
+  }
+}
+render(); paintSaveBar();
+</script>
+</body>
+</html>
