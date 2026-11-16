@@ -63,6 +63,11 @@
   </div>
 
   <section class="card">
+    <header><div><h2>Tasks in progress</h2><p class="sub" id="taskSub">From data/tasks.json</p></div><a class="btn" href="tasks.html">Open</a></header>
+    <ul class="clean" id="taskNow"></ul>
+  </section>
+
+  <section class="card">
     <header><div><h2>Gaps, by coach</h2><p class="sub" id="gapSub">From records/gap_analysis.md</p></div>
       <div class="row sub"><span class="dot" style="background:var(--rose)"></span>recurring <span class="dot" style="background:var(--amber)"></span>new <span class="dot" style="background:var(--faint)"></span>open <span class="dot" style="background:var(--auto)"></span>closing</div></header>
     <div class="gapcols" id="gaps"></div>
@@ -105,6 +110,20 @@ import { $, el, sv, chrome, manifest, fetchText, fetchJSON, fmtDate, renderMarkd
 import { parseGaps, parseHistorian, parseContext, COACHES, AGENTS, laneOf } from "./assets/records.js";
 import { loadCards, loadProgress, buildQueue } from "./assets/srs.js";
 chrome("index.html");
+
+/* tasks: what's in progress, plus the next to-do in each list */
+fetchJSON("data/tasks.json", { tasks: [] }).then(({ tasks = [] }) => {
+  const ul = $("taskNow"); ul.replaceChildren();
+  const sorted = tasks.slice().sort((a, b) => (a.projectOrder - b.projectOrder) || (a.order - b.order));
+  const rows = sorted.filter(t => t.status === "doing").map(t => ["doing", t]);
+  const lists = [...new Set(sorted.map(t => t.project))];
+  for (const p of lists) { const nx = sorted.find(t => t.project === p && t.status === "todo"); if (nx && !rows.some(([, t]) => t.project === p)) rows.push(["next", nx]); }
+  const done = tasks.filter(t => t.status === "done").length;
+  $("taskSub").textContent = tasks.length ? `${done} of ${tasks.length} done across ${lists.length} lists` : "From data/tasks.json";
+  if (!rows.length) { ul.append(el("li", { class: "none" }, "Nothing in progress.")); return; }
+  rows.slice(0, 6).forEach(([k, t]) => ul.append(el("li", {}, el("span", { class: `tagword ${k === "doing" ? "pending" : "next"}` }, k === "doing" ? "doing" : "next"),
+    el("span", {}, t.title, el("span", { class: "sub", style: "display:block;margin:0" }, t.project)))));
+});
 
 const M = await manifest();
 $("built").textContent = M.built ? `site built ${M.built.replace("T", " ").slice(0, 16)} UTC` : "";
